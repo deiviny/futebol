@@ -3,7 +3,7 @@
 Sistema para o grupo de futebol de todo fim de semana:
 
 1. **Presença** — cada jogador confirma por um link (sem login, só com o WhatsApp).
-2. **Dia do jogo** — o admin marca quem vai chegando; o app sorteia os times **equilibrados pelo score**: os primeiros `2 × jogadores por time` a chegar formam os dois primeiros times; quem chegou depois forma os próximos (que entram no lugar de quem perder).
+2. **Dia do jogo** — o admin marca quem vai chegando; o app sorteia os times **equilibrados pelo score**: os primeiros `2 × jogadores por time` a chegar formam os dois primeiros times; quem chegou depois entra na **lista de espera**, e a lista manda nas próximas partidas (o sorteio por score vale só para a primeira formação). Cada partida tem gols, par ou ímpar no empate, histórico e **relatório por partida e por jogador**.
 3. **Fim do jogo** — o admin informa o valor da quadra; o app divide, gera o **Pix copia e cola** (com o valor de cada um) pronto para o WhatsApp e controla **quem já pagou**.
 
 Também: cadastro público de arenas, jogadores em vários grupos (score por grupo), jogo fixo semanal com “sem jogo neste dia”.
@@ -14,10 +14,12 @@ Estrutura no padrão **SOLUS** (PHP puro, MVC com o controller dentro da view, P
 
 ## Instalação rápida (Windows)
 
+Para continuar em outro computador: `git clone https://github.com/deiviny/futebol.git` e siga uma das instalações abaixo. O banco **não** vai junto no Git (só o código e as migrations); para ter jogadores de teste, rode `php cron/seed_jogadores.php`.
+
 Requisitos: **PHP 7.4+** (com `pdo_mysql`, `mbstring`) e um **MySQL/MariaDB ligado** (XAMPP, Laragon, MySQL Installer…).
 
 ```powershell
-cd G:\Projetos\futebol
+cd futebol            # a pasta onde você clonou o projeto
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\instalar.ps1
 ```
