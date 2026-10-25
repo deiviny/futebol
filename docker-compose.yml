@@ -1,0 +1,48 @@
+# Sobe o sistema + banco de dados:
+#   docker compose up -d --build
+# Abre em http://localhost:8090   (troque a porta com APP_PORT=9000 docker compose up -d)
+
+name: futebol
+
+services:
+  app:
+    build: .
+    container_name: futebol-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8090}:80"
+    volumes:
+      - .:/var/www/html
+    environment:
+      # Dentro do container a configuração vem de docker/env.docker (banco = serviço "db"),
+      # sem mexer no .env da sua pasta.
+      ENV_ARQUIVO: /var/www/html/docker/env.docker
+    depends_on:
+      db:
+        condition: service_healthy
+    # Cria/atualiza as tabelas e só então liga o Apache.
+    command: ["sh", "-c", "php cron/instalar.php && exec apache2-foreground"]
+
+  db:
+    image: mariadb:10.11
+    container_name: futebol-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: futebol_root
+      MARIADB_DATABASE: futebol
+      MARIADB_USER: futebol
+      MARIADB_PASSWORD: futebol
+      TZ: America/Sao_Paulo
+    ports:
+      # Só para você abrir o banco por um cliente (DBeaver, HeidiSQL...). Pode remover.
+      - "127.0.0.1:${DB_PORT:-3307}:3306"
+    volumes:
+      - futebol_db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  futebol_db:

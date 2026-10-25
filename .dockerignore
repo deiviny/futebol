@@ -1,0 +1,5 @@
+.git
+.env
+vendor
+_antigo_laravel
+temp/*

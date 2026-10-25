@@ -1,0 +1,16 @@
+# Apache: bloqueia acesso direto a código, configuração e migrations.
+# (Com "php -S" para desenvolvimento este arquivo não é usado.)
+
+Options -Indexes
+
+<FilesMatch "^(\.env.*|composer\.(json|lock)|Dockerfile|docker-compose.*\.ya?ml|\.dockerignore|.*\.sql|.*\.md|.*\.ps1)$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(model|ini|migrations|vendor|temp|tests|docs|docker|_antigo_laravel)(/|$) - [F,L]
+    # Controllers só podem ser chamados pelo router.php
+    RewriteCond %{ENV:REDIRECT_STATUS} ^$
+    RewriteRule ^view/[^/]+/controller[A-Za-z0-9]*\.php$ - [F,L]
+</IfModule>
