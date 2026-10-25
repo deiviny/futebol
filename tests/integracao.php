@@ -17,6 +17,7 @@ use Model\Jogadores;
 use Model\Jogos;
 use Model\Login;
 use Model\Pagamentos;
+use Model\Perfil;
 use Model\Partidas;
 use Model\Presencas;
 use Model\PixPayload;
@@ -581,6 +582,19 @@ confere('inscrições fechadas recusam', erro(function () use ($pub, $tok) { $pu
 $ins->abrir($idGrupo, true);
 $linkNovo = $ins->novoLink($idGrupo);
 confere('link novo invalida o anterior', $linkNovo !== $link && erro(function () use ($pub, $tok) { $pub->publicoInfo($tok); }) !== null);
+
+echo "Meus dados\n";
+$perfil = new Perfil($u1);
+$meus = $perfil->dados();
+confere('mostra os dados da conta', $meus['email'] === 'um@teste.com' && $meus['telefone'] === '5562911111111');
+confere('lista os grupos que administra', count($meus['grupos']) >= 1 && $meus['grupos'][0]['dono'] === true);
+confere('e-mail de outra conta recusado', erro(function () use ($perfil) { $perfil->salvar(['nome' => 'Admin Um', 'email' => 'dois@teste.com', 'telefone' => '62911111111']); }) !== null);
+confere('WhatsApp de outra conta recusado', erro(function () use ($perfil) { $perfil->salvar(['nome' => 'Admin Um', 'email' => 'um@teste.com', 'telefone' => '62922222222']); }) !== null);
+$sessao = $perfil->salvar(['nome' => 'Admin Um Novo', 'email' => 'UM@teste.com', 'telefone' => '(62) 91111-0000']);
+confere('salva nome e WhatsApp novos', $sessao['nome'] === 'Admin Um Novo' && $perfil->dados()['telefone'] === '5562911110000');
+confere('senha atual errada recusada', erro(function () use ($perfil) { $perfil->trocarSenha(['senha_atual' => 'errada', 'senha_nova' => 'novaSenha123']); }) !== null);
+$perfil->trocarSenha(['senha_atual' => 'senha1234', 'senha_nova' => 'novaSenha123']);
+confere('entra com a senha nova', $login->autenticar(['email' => 'um@teste.com', 'senha' => 'novaSenha123'])['id'] === $u1['id']);
 
 echo "Grupo excluído\n";
 $g1->excluir($idGrupo);

@@ -54,7 +54,8 @@ $versao = function ($arquivo) {
 
         <div class="nav-right">
             <?= $acoesNav ?>
-            <a class="nav-user" href="?tela=sair" title="Sair"><span><?= e($usuario['nome']) ?></span><?= icone('sair') ?></a>
+            <a class="nav-user" href="?tela=perfil" title="Meus dados"><span><?= e($usuario['nome']) ?></span><?= icone('pessoa') ?></a>
+            <a class="nav-user" href="?tela=sair" title="Sair"><?= icone('sair') ?></a>
         </div>
     </div>
 </header>
@@ -69,7 +70,7 @@ $versao = function ($arquivo) {
     <?php foreach ($abas as $chave => $aba) : ?>
         <a href="?tela=<?= e($chave) ?>" class="<?= $abaAtiva === $chave ? 'ativa' : '' ?>"><?= icone($aba[1]) ?><span><?= e($aba[0]) ?></span></a>
     <?php endforeach; ?>
-    <a href="?tela=sair"><?= icone('sair') ?><span>Sair</span></a>
+    <a href="?tela=perfil" class="<?= $abaAtiva === 'perfil' ? 'ativa' : '' ?>"><?= icone('pessoa') ?><span>Meus dados</span></a>
 </nav>
 <?php endif; ?>
 

@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 // Só controllers conhecidos: nada de caminho vindo do navegador chegando no require.
 $controller = isset($_POST['controller']) ? (string) $_POST['controller'] : '';
-if (!preg_match('#^view/(login|inicio|arenas|grupos|grupo|jogo|relatorio|confirmar|inscricao)/controller\.php$#', $controller)
+if (!preg_match('#^view/(login|inicio|arenas|perfil|grupos|grupo|jogo|relatorio|confirmar|inscricao)/controller\.php$#', $controller)
     || !is_file(__DIR__ . '/' . $controller)) {
     responder(404, ['error' => 'Controller não encontrado.']);
 }
