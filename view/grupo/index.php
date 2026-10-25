@@ -105,6 +105,24 @@ $voltarTexto = 'Grupos';
         </div>
         <div class="field-note">Usado no fim do jogo para gerar o “Pix copia e cola” com o valor de cada um.</div>
 
+        <?php if ($idGrupo) : ?>
+        <div class="sec-title">Link de inscrição</div>
+        <div class="card-ios">
+            <p class="mb-2">Mande no grupo do WhatsApp: cada um preenche os próprios dados e entra como pendente até um admin aprovar na aba Jogadores.</p>
+            <div class="link-box"><span style="flex:1" id="linkInscricao"></span></div>
+            <div class="btn-row mt-3">
+                <button type="button" class="btn-ios sec" id="btnCopiarInscricao">Copiar link</button>
+                <a class="btn-ios verde" target="_blank" rel="noopener" id="btnWhatsInscricao" href="#">Enviar no WhatsApp</a>
+            </div>
+            <button type="button" class="btn-plain mt-2" id="btnNovoLink" style="font-size:15px">Gerar link novo</button>
+        </div>
+        <div class="inset-list mt-2">
+            <div class="field-row"><label for="gInscricaoAberta" class="flex-fill">Aceitando inscrições</label>
+                <label class="ios-switch"><input type="checkbox" id="gInscricaoAberta"><span></span></label></div>
+        </div>
+        <div class="field-note">Grupo cheio? Desligue e o link mostra “inscrições fechadas”. “Gerar link novo” invalida o anterior, caso ele tenha circulado onde não devia.</div>
+        <?php endif; ?>
+
         <div class="sec-title">Administradores</div>
         <div class="inset-list">
             <div id="adminsLista"></div>

@@ -121,6 +121,25 @@ $(function () {
     });
     desenhaAdmins();
 
+    // ---------- link de inscrição ----------
+    function mostraLinkInscricao(link) {
+        G.link_inscricao = link;
+        $('#linkInscricao').text(link || '');
+        $('#btnWhatsInscricao').attr('href', whatsappLink('Cadastre-se no ' + G.nome + ' por este link: ' + link));
+    }
+    $('#btnCopiarInscricao').on('click', function () { copiar(G.link_inscricao, 'Link copiado'); });
+    $('#btnNovoLink').on('click', function () {
+        confirmar('Gerar um link novo? O link atual para de funcionar para quem ainda não se cadastrou.', 'Gerar link novo', true, function () {
+            api('grupo', 'link_novo', { id_grupo: GRUPO_ID }).done(function (r) { mostraLinkInscricao(r.link); alertTop('success', r.mensagem); });
+        });
+    });
+    $('#gInscricaoAberta').on('change', function () {
+        var $c = $(this), aberta = $c.is(':checked');
+        api('grupo', 'inscricao_abrir', { id_grupo: GRUPO_ID, aberta: aberta ? 's' : 'n' })
+            .done(function (r) { alertTop('success', r.mensagem); })
+            .fail(function () { $c.prop('checked', !aberta); });
+    });
+
     function preencheFormGrupo(g) {
         $('#gNome').val(g.nome);
         $('#gPorTime').val(g.jogadores_por_time);
@@ -136,6 +155,8 @@ $(function () {
             COLETES = [[g.coletes[0].nome, g.coletes[0].cor], [g.coletes[1].nome, g.coletes[1].cor]];
             desenhaColetes();
         }
+        mostraLinkInscricao(g.link_inscricao);
+        $('#gInscricaoAberta').prop('checked', g.inscricao_aberta);
         SOU_DONO = g.dono;
         ADMINS = []; NOMES_ADMINS = {}; DONO = null;
         (g.admins || []).forEach(function (a) {
@@ -321,14 +342,27 @@ $(function () {
 
     // ---------- jogadores ----------
     function desenhaJogadores() {
-        var ativos = JOGADORES.filter(function (j) { return j.ativo === 's'; }).length;
+        var pendentes = JOGADORES.filter(function (j) { return j.pendente === 's'; });
+        var membros = JOGADORES.filter(function (j) { return j.pendente !== 's'; });
+        var ativos = membros.filter(function (j) { return j.ativo === 's'; }).length;
         var h = '';
-        if (!JOGADORES.length) {
-            $('#jogadoresLista').html('<div class="empty"><h3>Nenhum jogador</h3><p>Adicione os jogadores com WhatsApp e o nível de cada um (score). Eles também podem se cadastrar pelo link de confirmação.</p></div>');
+        if (pendentes.length) {
+            h += '<div class="sec-title">Aguardando aprovação (' + pendentes.length + ')</div><div class="inset-list">';
+            pendentes.forEach(function (j) {
+                var partes = [formataTelefone(j.whatsapp)];
+                if (j.instagram) { partes.push('@' + j.instagram); }
+                h += '<div class="row-item"><div class="row-main"><div class="row-title">' + esc(j.nome) + '</div><div class="row-sub wrap">' + esc(partes.join(' · ')) + '</div></div>' +
+                    '<div class="row-end"><button type="button" class="btn-plain perigo" data-recusar="' + j.id + '" data-nome="' + esc(j.nome) + '" style="font-size:15px">Recusar</button>' +
+                    '<button type="button" class="btn-ios verde peq" data-aprovar="' + j.id + '">Aprovar</button></div></div>';
+            });
+            h += '</div><div class="sec-foot">Entraram pelo link de inscrição. Aprovados entram com score 5 (ajuste depois).</div>';
+        }
+        if (!membros.length) {
+            $('#jogadoresLista').html(h + '<div class="empty"><h3>Nenhum jogador</h3><p>Adicione os jogadores com WhatsApp e o nível de cada um (score), ou mande o link de inscrição (em Ajustes) no grupo do WhatsApp.</p></div>');
             return;
         }
-        h += '<div class="sec-title">' + ativos + ' ativo' + (ativos === 1 ? '' : 's') + ' · ' + JOGADORES.length + ' no total</div><div class="inset-list">';
-        JOGADORES.forEach(function (j) {
+        h += '<div class="sec-title">' + ativos + ' ativo' + (ativos === 1 ? '' : 's') + ' · ' + membros.length + ' no total</div><div class="inset-list">';
+        membros.forEach(function (j) {
             var partes = [formataTelefone(j.whatsapp)];
             if (j.instagram) { partes.push('@' + j.instagram); }
             if (j.convidado_por) { partes.push('convidado por ' + j.convidado_por); }
@@ -346,7 +380,7 @@ $(function () {
     function preencheConvidou(selecionado, ignorarId) {
         var h = '<option value="">Ninguém</option>';
         JOGADORES.forEach(function (j) {
-            if (j.id === ignorarId) { return; }
+            if (j.id === ignorarId || j.pendente === 's') { return; }
             h += '<option value="' + j.id + '"' + (selecionado === j.id ? ' selected' : '') + '>' + esc(j.nome) + '</option>';
         });
         $('#pConvidou').html(h);
@@ -372,7 +406,18 @@ $(function () {
     }
 
     $('#btnNovoJogador').on('click', function () { abrirJogador(null); });
-    $('#jogadoresLista').on('click', '.row-item', function () {
+    $('#jogadoresLista').on('click', '[data-aprovar]', function (e) {
+        e.stopPropagation();
+        api('grupo', 'pendente_aprovar', { id_grupo: GRUPO_ID, id: $(this).data('aprovar') }).done(function (r) { alertTop('success', r.mensagem); recarregaJogadores(); });
+    });
+    $('#jogadoresLista').on('click', '[data-recusar]', function (e) {
+        e.stopPropagation();
+        var id = $(this).data('recusar');
+        confirmar('Recusar o pedido de ' + $(this).data('nome') + '?', 'Recusar', true, function () {
+            api('grupo', 'pendente_recusar', { id_grupo: GRUPO_ID, id: id }).done(function (r) { alertTop('success', r.mensagem); recarregaJogadores(); });
+        });
+    });
+    $('#jogadoresLista').on('click', '.row-item[data-jogador]', function () {
         var id = $(this).data('jogador');
         abrirJogador(JOGADORES.filter(function (j) { return j.id === id; })[0]);
     });

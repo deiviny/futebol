@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Ponto de entrada único. Telas: ?tela=inicio|grupos|grupo|jogo|relatorio|arenas|login|confirmar|sair
+ * Ponto de entrada único. Telas: ?tela=inicio|grupos|grupo|jogo|relatorio|arenas|login|confirmar|inscricao|sair
  */
 
 session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax']);
@@ -13,7 +13,7 @@ define('APP', true);
 require_once __DIR__ . '/model/Init.php';
 
 $tela = isset($_GET['tela']) ? (string) $_GET['tela'] : 'inicio';
-$telasPublicas = ['login', 'confirmar'];
+$telasPublicas = ['login', 'confirmar', 'inscricao'];
 $telasPrivadas = ['inicio', 'grupos', 'grupo', 'jogo', 'relatorio', 'arenas'];
 
 if ($tela === 'sair') {

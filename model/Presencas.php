@@ -137,7 +137,7 @@ class Presencas extends Conect
         $nome = trim((string) $nome);
 
         $stmt = $this->_conexao->prepare(
-            "SELECT j.id, j.nome, gj.ativo FROM jogadores j
+            "SELECT j.id, j.nome, gj.ativo, gj.pendente FROM jogadores j
              JOIN grupos_jogadores gj ON gj.id_jogador = j.id AND gj.id_grupo = ?
              WHERE j.whatsapp = ?"
         );
@@ -145,6 +145,7 @@ class Presencas extends Conect
         $membro = $stmt->fetch();
 
         if ($membro) {
+            $this->exige($membro['pendente'] === 'n', 'Seu pedido para entrar no grupo ainda aguarda a aprovação do administrador.');
             $this->exige($membro['ativo'] === 's', 'Seu cadastro está inativo neste grupo. Fale com o administrador.');
             $this->gravaResposta((int) $jogo['id'], (int) $membro['id'], $resposta);
 

@@ -24,12 +24,12 @@ class Jogadores extends Conect
 
         $stmt = $this->_conexao->prepare(
             'SELECT j.id, j.nome, j.whatsapp, j.instagram, j.data_nascimento,
-                    gj.score, gj.ativo, gj.id_convidado_por, c.nome AS convidado_por
+                    gj.score, gj.ativo, gj.pendente, gj.id_convidado_por, c.nome AS convidado_por
              FROM grupos_jogadores gj
              JOIN jogadores j ON j.id = gj.id_jogador
              LEFT JOIN jogadores c ON c.id = gj.id_convidado_por
              WHERE gj.id_grupo = ?
-             ORDER BY gj.ativo DESC, j.nome ASC'
+             ORDER BY gj.pendente DESC, gj.ativo DESC, j.nome ASC'
         );
         $stmt->execute([(int) $idGrupo]);
 
@@ -98,10 +98,12 @@ class Jogadores extends Conect
                 }
             }
 
+            // Admin salvou o jogador: se ele estava pendente (veio pelo link), fica aprovado.
             $stmt = $this->_conexao->prepare(
-                'INSERT INTO grupos_jogadores (id_grupo, id_jogador, score, id_convidado_por, ativo)
+                "INSERT INTO grupos_jogadores (id_grupo, id_jogador, score, id_convidado_por, ativo)
                  VALUES (?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE score = VALUES(score), id_convidado_por = VALUES(id_convidado_por), ativo = VALUES(ativo)'
+                 ON DUPLICATE KEY UPDATE score = VALUES(score), id_convidado_por = VALUES(id_convidado_por), ativo = VALUES(ativo),
+                                         pendente = 'n'"
             );
             $stmt->execute([$idGrupo, $idJogador, $score, $idConvidou > 0 ? $idConvidou : null, $ativo]);
 

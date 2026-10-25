@@ -25,6 +25,7 @@ class Grupos extends Conect
         $stmt = $this->_conexao->prepare(
             "SELECT g.id, g.nome, g.jogadores_por_time, g.recorrente, g.dia_semana, g.horario,
                     (SELECT COUNT(*) FROM grupos_jogadores gj WHERE gj.id_grupo = g.id AND gj.ativo = 's') AS total_jogadores,
+                    (SELECT COUNT(*) FROM grupos_jogadores gj WHERE gj.id_grupo = g.id AND gj.pendente = 's') AS pendentes,
                     (SELECT MIN(jo.data_hora) FROM jogos jo
                       WHERE jo.id_grupo = g.id AND jo.situacao IN ('agendado','em_andamento')
                         AND jo.data_hora >= ?) AS proximo_jogo
@@ -38,6 +39,7 @@ class Grupos extends Conect
         foreach ($lista as &$g) {
             $g['id'] = (int) $g['id'];
             $g['total_jogadores'] = (int) $g['total_jogadores'];
+            $g['pendentes'] = (int) $g['pendentes'];
             $g['proximo_jogo_fmt'] = $g['proximo_jogo'] ? dataHoraBr($g['proximo_jogo']) : null;
             $g['resumo_fixo'] = $this->resumoFixo($g);
         }
@@ -72,6 +74,8 @@ class Grupos extends Conect
             'pix_cidade' => $g['pix_cidade'],
             'coletes' => self::coletes($g),
             'resumo_fixo' => $this->resumoFixo($g),
+            'link_inscricao' => Inscricoes::link($g['convite_token']),
+            'inscricao_aberta' => $g['inscricao_aberta'] === 's',
             'dono' => (bool) $g['dono'],
             'admins' => $this->admins($g),
         ];
@@ -203,13 +207,14 @@ class Grupos extends Conect
         $stmt = $this->_conexao->prepare(
             'INSERT INTO grupos (id_usuario, nome, jogadores_por_time, recorrente, dia_semana, horario,
                     id_arena_padrao, pix_tipo, pix_chave, pix_nome, pix_cidade,
-                    colete1_nome, colete1_cor, colete2_nome, colete2_cor)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                    colete1_nome, colete1_cor, colete2_nome, colete2_cor, convite_token)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $this->idUsuario(), $nome, $porTime, $recorrente, $diaSemana, $horario, $idArena ?: null,
             $pix['tipo'], $pix['chave'], $pix['nome'], $pix['cidade'],
             $coletes[0]['nome'], $coletes[0]['cor'], $coletes[1]['nome'], $coletes[1]['cor'],
+            Inscricoes::novoToken(),
         ]);
         $id = (int) $this->_conexao->lastInsertId();
         if ($mexeAdmins) {

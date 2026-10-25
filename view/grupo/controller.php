@@ -7,6 +7,7 @@ if (!defined('ROUTER')) {
 
 use Model\Arenas;
 use Model\Grupos;
+use Model\Inscricoes;
 use Model\Jogadores;
 use Model\Jogos;
 use Model\Partidas;
@@ -83,6 +84,27 @@ try {
             $output['mensagem'] = $resultado === 'inativado'
                 ? 'Jogador inativado (ele tem histórico nos jogos)'
                 : 'Jogador removido do grupo';
+            break;
+
+        case 'link_novo':
+            $output['link'] = (new Inscricoes($sess))->novoLink($idGrupo);
+            $output['mensagem'] = 'Link novo gerado. O anterior parou de funcionar.';
+            break;
+
+        case 'inscricao_abrir':
+            $aberta = isset($_POST['aberta']) && $_POST['aberta'] === 's';
+            (new Inscricoes($sess))->abrir($idGrupo, $aberta);
+            $output['mensagem'] = $aberta ? 'Inscrições abertas' : 'Inscrições fechadas';
+            break;
+
+        case 'pendente_aprovar':
+            (new Inscricoes($sess))->aprovar($idGrupo, isset($_POST['id']) ? $_POST['id'] : 0);
+            $output['mensagem'] = 'Jogador aprovado';
+            break;
+
+        case 'pendente_recusar':
+            (new Inscricoes($sess))->recusar($idGrupo, isset($_POST['id']) ? $_POST['id'] : 0);
+            $output['mensagem'] = 'Pedido recusado';
             break;
 
         default:

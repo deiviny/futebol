@@ -9,6 +9,7 @@ $(function () {
         res.lista.forEach(function (g) {
             var linha2 = (g.resumo_fixo || 'Sem jogo fixo') + ' · ' + g.jogadores_por_time + ' por time';
             var linha3 = g.proximo_jogo_fmt ? 'Próximo: ' + g.proximo_jogo_fmt : 'Sem jogo marcado';
+            if (g.pendentes) { linha3 += ' · ' + g.pendentes + ' aguardando aprovação'; }
             h += '<a class="row-item" href="?tela=grupo&id=' + g.id + '">' +
                 '<div class="row-icon verde"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="12 7.5 16 10.4 14.5 15 9.5 15 8 10.4"/></svg></div>' +
                 '<div class="row-main"><div class="row-title">' + esc(g.nome) + '</div>' +
