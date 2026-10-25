@@ -3,7 +3,8 @@
 namespace Model;
 
 /**
- * Grupos de futebol do administrador logado (ex.: "Futebol de sexta").
+ * Grupos de futebol que o administrador logado administra (ex.: "Futebol de sexta").
+ * Quem cria o grupo é o dono: só ele muda a lista de administradores e exclui o grupo.
  */
 class Grupos extends Conect
 {
@@ -28,10 +29,10 @@ class Grupos extends Conect
                       WHERE jo.id_grupo = g.id AND jo.situacao IN ('agendado','em_andamento')
                         AND jo.data_hora >= ?) AS proximo_jogo
              FROM grupos g
-             WHERE g.id_usuario = ? AND g.excluido = 'n'
+             WHERE " . $this->sqlAdminDoGrupo('g') . " AND g.excluido = 'n'
              ORDER BY g.nome ASC"
         );
-        $stmt->execute([date('Y-m-d 00:00:00'), $this->idUsuario()]);
+        $stmt->execute([date('Y-m-d 00:00:00'), $this->idUsuario(), $this->idUsuario()]);
 
         $lista = $stmt->fetchAll();
         foreach ($lista as &$g) {
@@ -71,7 +72,66 @@ class Grupos extends Conect
             'pix_cidade' => $g['pix_cidade'],
             'coletes' => self::coletes($g),
             'resumo_fixo' => $this->resumoFixo($g),
+            'dono' => (bool) $g['dono'],
+            'admins' => $this->admins($g),
         ];
+    }
+
+    /**
+     * Dono e administradores convidados. "nome" vem da conta de quem já se cadastrou
+     * com aquele WhatsApp (null = ainda não criou a conta).
+     */
+    private function admins(array $g)
+    {
+        $stmt = $this->_conexao->prepare('SELECT nome, telefone FROM usuarios WHERE id = ?');
+        $stmt->execute([(int) $g['id_usuario']]);
+        $dono = $stmt->fetch();
+
+        $lista = [['telefone' => $dono['telefone'], 'nome' => $dono['nome'], 'dono' => true]];
+
+        $stmt = $this->_conexao->prepare(
+            'SELECT ga.telefone, u.nome FROM grupos_admins ga
+             LEFT JOIN usuarios u ON u.telefone = ga.telefone
+             WHERE ga.id_grupo = ? ORDER BY ga.id'
+        );
+        $stmt->execute([(int) $g['id']]);
+        foreach ($stmt->fetchAll() as $a) {
+            $lista[] = ['telefone' => $a['telefone'], 'nome' => $a['nome'], 'dono' => false];
+        }
+
+        return $lista;
+    }
+
+    /**
+     * Troca a lista de administradores convidados (só o dono). $texto = WhatsApps
+     * separados por vírgula; o do próprio dono é ignorado.
+     */
+    private function salvarAdmins($idGrupo, $texto)
+    {
+        $stmt = $this->_conexao->prepare('SELECT telefone FROM usuarios WHERE id = ?');
+        $stmt->execute([$this->idUsuario()]);
+        $meu = $stmt->fetchColumn();
+
+        $telefones = [];
+        foreach (explode(',', (string) $texto) as $item) {
+            if (trim($item) === '') {
+                continue;
+            }
+            $tel = Jogadores::normalizaWhatsapp($item);
+            $this->exige($tel !== null, 'WhatsApp de administrador inválido: ' . trim($item) . '. Use DDD + número.');
+            if ($tel !== $meu) {
+                $telefones[$tel] = true;
+            }
+        }
+        $this->exige(count($telefones) <= 10, 'No máximo 10 administradores além de você.');
+
+        $stmt = $this->_conexao->prepare('DELETE FROM grupos_admins WHERE id_grupo = ?');
+        $stmt->execute([(int) $idGrupo]);
+
+        $insere = $this->_conexao->prepare('INSERT INTO grupos_admins (id_grupo, telefone) VALUES (?, ?)');
+        foreach (array_keys($telefones) as $tel) {
+            $insere->execute([(int) $idGrupo, (string) $tel]);
+        }
     }
 
     /** Os dois coletes do grupo: [['nome' => .., 'cor' => ..], ['nome' => .., 'cor' => ..]] */
@@ -114,22 +174,28 @@ class Grupos extends Conect
             $this->exige($stmt->fetch(), 'Arena não encontrada.');
         }
 
+        $atual = $id > 0 ? $this->grupoDoUsuario($id) : null;
         $pix = $this->validarPix($dados);
-        $coletes = $this->validarColetes($dados, $id > 0 ? $this->grupoDoUsuario($id) : null);
+        $coletes = $this->validarColetes($dados, $atual);
+        // A lista de administradores só é mexida pelo dono e só quando vem no formulário.
+        $mexeAdmins = array_key_exists('admins', $dados) && (!$atual || $atual['dono']);
 
         if ($id > 0) {
             $stmt = $this->_conexao->prepare(
                 'UPDATE grupos SET nome = ?, jogadores_por_time = ?, recorrente = ?, dia_semana = ?, horario = ?,
                         id_arena_padrao = ?, pix_tipo = ?, pix_chave = ?, pix_nome = ?, pix_cidade = ?,
                         colete1_nome = ?, colete1_cor = ?, colete2_nome = ?, colete2_cor = ?
-                 WHERE id = ? AND id_usuario = ?'
+                 WHERE id = ?'
             );
             $stmt->execute([
                 $nome, $porTime, $recorrente, $diaSemana, $horario, $idArena ?: null,
                 $pix['tipo'], $pix['chave'], $pix['nome'], $pix['cidade'],
                 $coletes[0]['nome'], $coletes[0]['cor'], $coletes[1]['nome'], $coletes[1]['cor'],
-                $id, $this->idUsuario(),
+                $id,
             ]);
+            if ($mexeAdmins) {
+                $this->salvarAdmins($id, $dados['admins']);
+            }
 
             return $id;
         }
@@ -145,13 +211,18 @@ class Grupos extends Conect
             $pix['tipo'], $pix['chave'], $pix['nome'], $pix['cidade'],
             $coletes[0]['nome'], $coletes[0]['cor'], $coletes[1]['nome'], $coletes[1]['cor'],
         ]);
+        $id = (int) $this->_conexao->lastInsertId();
+        if ($mexeAdmins) {
+            $this->salvarAdmins($id, $dados['admins']);
+        }
 
-        return (int) $this->_conexao->lastInsertId();
+        return $id;
     }
 
     public function excluir($id)
     {
-        $this->grupoDoUsuario($id);
+        $grupo = $this->grupoDoUsuario($id);
+        $this->exige($grupo['dono'], 'Só quem criou o grupo pode excluí-lo.');
 
         $stmt = $this->_conexao->prepare("UPDATE grupos SET excluido = 's' WHERE id = ? AND id_usuario = ?");
         $stmt->execute([(int) $id, $this->idUsuario()]);

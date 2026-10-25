@@ -26,12 +26,13 @@ class Recorrentes extends Conect
      */
     public function gerar($semanas = 4)
     {
-        $sql = "SELECT * FROM grupos
-                WHERE recorrente = 's' AND excluido = 'n' AND dia_semana IS NOT NULL AND horario IS NOT NULL";
+        $sql = "SELECT g.* FROM grupos g
+                WHERE g.recorrente = 's' AND g.excluido = 'n' AND g.dia_semana IS NOT NULL AND g.horario IS NOT NULL";
         $params = [];
 
         if ($this->sess_usuario !== null) {
-            $sql .= ' AND id_usuario = ?';
+            $sql .= ' AND ' . $this->sqlAdminDoGrupo('g');
+            $params[] = $this->idUsuario();
             $params[] = $this->idUsuario();
         }
 

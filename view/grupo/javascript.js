@@ -71,6 +71,56 @@ $(function () {
     $('#gPixTipo').on('change', alternaPix);
     alternaFixo(); alternaPix();
 
+    // ---------- administradores ----------
+    var ADMINS = [];        // WhatsApps dos convidados (o dono não entra aqui)
+    var NOMES_ADMINS = {};  // whatsapp => nome de quem já tem conta
+    var DONO = null;        // {nome, telefone} de quem criou o grupo
+    var SOU_DONO = true;    // grupo novo: quem cria é o dono
+
+    function soDigitos(t) {
+        var n = String(t || '').replace(/\D/g, '');
+        if (n && n.length <= 11) { n = '55' + n; }
+        return n;
+    }
+
+    function desenhaAdmins() {
+        var h = '';
+        if (DONO) {
+            h += '<div class="row-item"><div class="row-main"><div class="row-title">' + esc(DONO.nome) + '</div>' +
+                '<div class="row-sub">' + esc(formataTelefone(DONO.telefone || '')) + '</div></div>' +
+                '<div class="row-end"><span class="chip azul">Criou o grupo</span></div></div>';
+        }
+        ADMINS.forEach(function (tel) {
+            var nome = NOMES_ADMINS[tel];
+            h += '<div class="row-item"><div class="row-main"><div class="row-title">' + esc(nome || formataTelefone(tel)) + '</div>' +
+                '<div class="row-sub">' + esc(nome ? formataTelefone(tel) : 'Ainda não criou a conta') + '</div></div>' +
+                '<div class="row-end">' + (SOU_DONO ? '<button type="button" class="btn-plain perigo" data-remover-admin="' + esc(tel) + '" style="font-size:15px">Remover</button>' : '') + '</div></div>';
+        });
+        if (!h) { h = '<div class="row-empty">Só você. Adicione o WhatsApp de quem também cuida do grupo.</div>'; }
+        $('#adminsLista').html(h);
+        $('#blocoNovoAdmin').toggleClass('hidden', !SOU_DONO);
+        $('#notaAdmins').text(SOU_DONO
+            ? 'Quem tiver conta com esse WhatsApp também administra o grupo (jogos, jogadores e cobrança). Quem ainda não tem conta é só criar com o mesmo número.'
+            : 'Só quem criou o grupo muda a lista de administradores.');
+    }
+
+    function adicionaAdmin() {
+        var tel = soDigitos($('#gNovoAdmin').val());
+        if (tel.length < 12 || tel.length > 15) { alertTop('error', 'WhatsApp inválido. Use DDD + número.'); return; }
+        if (DONO && soDigitos(DONO.telefone) === tel) { alertTop('error', 'Esse é o WhatsApp de quem criou o grupo.'); return; }
+        if (ADMINS.indexOf(tel) < 0) { ADMINS.push(tel); }
+        $('#gNovoAdmin').val('');
+        desenhaAdmins();
+    }
+    $('#btnAddAdmin').on('click', adicionaAdmin);
+    $('#gNovoAdmin').on('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); adicionaAdmin(); } });
+    $('#adminsLista').on('click', '[data-remover-admin]', function () {
+        var tel = String($(this).data('remover-admin'));
+        ADMINS = ADMINS.filter(function (t) { return t !== tel; });
+        desenhaAdmins();
+    });
+    desenhaAdmins();
+
     function preencheFormGrupo(g) {
         $('#gNome').val(g.nome);
         $('#gPorTime').val(g.jogadores_por_time);
@@ -86,6 +136,15 @@ $(function () {
             COLETES = [[g.coletes[0].nome, g.coletes[0].cor], [g.coletes[1].nome, g.coletes[1].cor]];
             desenhaColetes();
         }
+        SOU_DONO = g.dono;
+        ADMINS = []; NOMES_ADMINS = {}; DONO = null;
+        (g.admins || []).forEach(function (a) {
+            if (a.dono) { DONO = a; return; }
+            ADMINS.push(a.telefone);
+            if (a.nome) { NOMES_ADMINS[a.telefone] = a.nome; }
+        });
+        desenhaAdmins();
+        $('#btnExcluirGrupo').toggleClass('hidden', !g.dono);
         alternaFixo(); alternaPix();
     }
 
@@ -109,6 +168,10 @@ $(function () {
             colete2_nome: $('#gColete2Nome').val(),
             colete2_cor: $('#gColete2Cor').val()
         };
+        if (SOU_DONO) {
+            if ($('#gNovoAdmin').val().trim()) { adicionaAdmin(); }
+            dados.admins = ADMINS.join(',');
+        }
         comTrava($('#btnSalvarGrupo'), api('grupo', 'salvar', dados, { silencioso: true }))
             .done(function (res) {
                 if (GRUPO_ID) {

@@ -64,14 +64,14 @@ class Jogos extends Conect
                     g.nome AS grupo_nome, a.nome AS arena_nome,
                     (SELECT COUNT(*) FROM jogos_presencas p WHERE p.id_jogo = jo.id AND p.resposta = 'confirmado') AS confirmados
              FROM jogos jo
-             JOIN grupos g ON g.id = jo.id_grupo AND g.id_usuario = ? AND g.excluido = 'n'
+             JOIN grupos g ON g.id = jo.id_grupo AND " . $this->sqlAdminDoGrupo('g') . " AND g.excluido = 'n'
              LEFT JOIN arenas a ON a.id = jo.id_arena
              WHERE (jo.situacao = 'em_andamento'
                     OR (jo.situacao IN ('agendado','cancelado') AND jo.data_hora >= ? AND jo.data_hora < ?))
              ORDER BY jo.data_hora ASC
              LIMIT 30"
         );
-        $stmt->execute([$this->idUsuario(), date('Y-m-d 00:00:00'), date('Y-m-d 00:00:00', strtotime('+15 days'))]);
+        $stmt->execute([$this->idUsuario(), $this->idUsuario(), date('Y-m-d 00:00:00'), date('Y-m-d 00:00:00', strtotime('+15 days'))]);
 
         $lista = [];
         foreach ($stmt->fetchAll() as $jogo) {

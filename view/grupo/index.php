@@ -105,6 +105,15 @@ $voltarTexto = 'Grupos';
         </div>
         <div class="field-note">Usado no fim do jogo para gerar o “Pix copia e cola” com o valor de cada um.</div>
 
+        <div class="sec-title">Administradores</div>
+        <div class="inset-list">
+            <div id="adminsLista"></div>
+            <div class="field-row" id="blocoNovoAdmin"><label for="gNovoAdmin">WhatsApp</label>
+                <input id="gNovoAdmin" type="tel" inputmode="tel" maxlength="20" placeholder="(62) 99999-8888">
+                <button type="button" class="btn-plain" id="btnAddAdmin" style="font-size:15px">Adicionar</button></div>
+        </div>
+        <div class="field-note" id="notaAdmins">Quem tiver conta com esse WhatsApp também administra o grupo (jogos, jogadores e cobrança). Quem ainda não tem conta é só criar com o mesmo número.</div>
+
         <div class="input-erro" id="erroGrupo" role="alert"></div>
         <button type="submit" class="btn-ios bloco mt-3" id="btnSalvarGrupo"><?= $idGrupo ? 'Salvar alterações' : 'Criar grupo' ?></button>
         <?php if ($idGrupo) : ?>

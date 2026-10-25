@@ -55,7 +55,7 @@ function erro(callable $fn)
 
 $pdo = new PDO('mysql:host=' . SERVER . ';port=' . PORTA . ';dbname=' . BANCO . ';charset=utf8mb4', USER, PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
-foreach (['jogos_gols', 'jogos_partidas_jogadores', 'jogos_fila', 'jogos_partidas', 'jogos_pagamentos', 'jogos_times_jogadores', 'jogos_times', 'jogos_presencas', 'jogos', 'grupos_jogadores', 'jogadores', 'grupos', 'arenas', 'usuarios'] as $t) {
+foreach (['jogos_gols', 'jogos_partidas_jogadores', 'jogos_fila', 'jogos_partidas', 'jogos_pagamentos', 'jogos_times_jogadores', 'jogos_times', 'jogos_presencas', 'jogos', 'grupos_jogadores', 'jogadores', 'grupos_admins', 'grupos', 'arenas', 'usuarios'] as $t) {
     $pdo->exec("TRUNCATE TABLE $t");
 }
 $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
@@ -87,11 +87,13 @@ confere('resultados variam entre sorteios', count($variados) > 3);
 // ------------------------------------------------------------------ login
 echo "Login\n";
 $login = new Login();
-$u1 = $login->cadastrar(['nome' => 'Admin Um', 'email' => 'um@teste.com', 'senha' => 'senha1234']);
-$u2 = $login->cadastrar(['nome' => 'Admin Dois', 'email' => 'dois@teste.com', 'senha' => 'senha1234']);
+$u1 = $login->cadastrar(['nome' => 'Admin Um', 'email' => 'um@teste.com', 'telefone' => '(62) 91111-1111', 'senha' => 'senha1234']);
+$u2 = $login->cadastrar(['nome' => 'Admin Dois', 'email' => 'dois@teste.com', 'telefone' => '62 92222-2222', 'senha' => 'senha1234']);
 confere('cadastra e devolve id', $u1['id'] > 0 && $u2['id'] > $u1['id']);
-confere('e-mail duplicado bloqueado', erro(function () use ($login) { $login->cadastrar(['nome' => 'X', 'email' => 'UM@teste.com', 'senha' => 'senha1234']); }) !== null);
-confere('senha curta bloqueada', erro(function () use ($login) { $login->cadastrar(['nome' => 'X', 'email' => 'x@teste.com', 'senha' => '123']); }) !== null);
+confere('e-mail duplicado bloqueado', erro(function () use ($login) { $login->cadastrar(['nome' => 'X', 'email' => 'UM@teste.com', 'telefone' => '62933333333', 'senha' => 'senha1234']); }) !== null);
+confere('WhatsApp duplicado bloqueado', erro(function () use ($login) { $login->cadastrar(['nome' => 'X', 'email' => 'x@teste.com', 'telefone' => '5562911111111', 'senha' => 'senha1234']); }) !== null);
+confere('cadastro sem WhatsApp recusado', erro(function () use ($login) { $login->cadastrar(['nome' => 'X', 'email' => 'x@teste.com', 'senha' => 'senha1234']); }) !== null);
+confere('senha curta bloqueada', erro(function () use ($login) { $login->cadastrar(['nome' => 'X', 'email' => 'x@teste.com', 'telefone' => '62933333333', 'senha' => '123']); }) !== null);
 confere('login correto', $login->autenticar(['email' => 'um@teste.com', 'senha' => 'senha1234'])['id'] === $u1['id']);
 confere('senha errada recusada', erro(function () use ($login) { $login->autenticar(['email' => 'um@teste.com', 'senha' => 'errada']); }) !== null);
 confere('sem senha em texto na sessão', !array_key_exists('senha', $u1));
@@ -133,6 +135,23 @@ confere('coletes com a mesma cor recusados', erro(function () use ($g1, $dadosGr
 confere('cor de colete inválida recusada', erro(function () use ($g1, $dadosGrupo) { $g1->salvar($dadosGrupo + ['colete1_nome' => 'A', 'colete1_cor' => 'vermelho', 'colete2_nome' => 'B', 'colete2_cor' => '#00FF00']); }) !== null);
 confere('outro admin não vê o grupo', erro(function () use ($g2, $idGrupo) { $g2->buscar($idGrupo); }) !== null);
 confere('listagem do outro admin vazia', count($g2->listing()) === 0);
+
+echo "Vários administradores\n";
+$g1->salvar($dadosGrupo + ['admins' => '(62) 92222-2222, 62 94444-4444, 62 91111-1111']);
+$grupo = $g1->buscar($idGrupo);
+confere('dono vê a lista: ele + 2 convidados (o próprio número é ignorado)', count($grupo['admins']) === 3 && $grupo['admins'][0]['dono'] && $grupo['dono'] === true);
+confere('convidado com conta aparece com o nome', $grupo['admins'][1]['nome'] === 'Admin Dois' && $grupo['admins'][2]['nome'] === null);
+confere('convidado vê o grupo na listagem', count($g2->listing()) === 1);
+confere('convidado abre o grupo, mas não é dono', $g2->buscar($idGrupo)['dono'] === false);
+$g2->salvar(array_merge($dadosGrupo, ['nome' => 'Futebol de sexta!', 'admins' => '']));
+confere('convidado edita o grupo, sem mexer nos administradores', $g1->buscar($idGrupo)['nome'] === 'Futebol de sexta!' && count($g1->buscar($idGrupo)['admins']) === 3);
+confere('convidado não exclui o grupo', erro(function () use ($g2, $idGrupo) { $g2->excluir($idGrupo); }) !== null);
+confere('WhatsApp de admin inválido recusado', erro(function () use ($g1, $dadosGrupo) { $g1->salvar($dadosGrupo + ['admins' => '123']); }) !== null);
+$g1->salvar($dadosGrupo);
+confere('salvar sem o campo admins mantém a lista', count($g1->buscar($idGrupo)['admins']) === 3);
+$g1->salvar($dadosGrupo + ['admins' => '']);
+confere('dono tira os convidados', count($g1->buscar($idGrupo)['admins']) === 1);
+confere('ex-convidado perde o acesso', count($g2->listing()) === 0 && erro(function () use ($g2, $idGrupo) { $g2->buscar($idGrupo); }) !== null);
 confere('pix incompleto recusado', erro(function () use ($g1) { $g1->salvar(['nome' => 'X', 'jogadores_por_time' => 5, 'pix_chave' => 'abc']); }) !== null);
 
 echo "Jogadores\n";

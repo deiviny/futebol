@@ -33,11 +33,12 @@ $cadastroAberto = strtolower((string) env('CADASTRO_ABERTO', 'true')) === 'true'
         <div class="inset-list">
             <div class="field-row"><label for="cadNome">Nome</label><input id="cadNome" name="nome" type="text" autocomplete="name" placeholder="Seu nome" maxlength="120" required></div>
             <div class="field-row"><label for="cadEmail">E-mail</label><input id="cadEmail" name="email" type="email" inputmode="email" autocomplete="username" placeholder="voce@email.com" maxlength="150" required></div>
+            <div class="field-row"><label for="cadTelefone">WhatsApp</label><input id="cadTelefone" name="telefone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(62) 99999-8888" maxlength="20" required></div>
             <div class="field-row"><label for="cadSenha">Senha</label><input id="cadSenha" name="senha" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" minlength="8" required></div>
         </div>
         <div class="input-erro" id="erroCadastrar" role="alert"></div>
         <button class="btn-ios bloco mt-3" type="submit">Criar conta de administrador</button>
-        <p class="field-note text-center">Você cadastra seus grupos, jogadores e jogos. Quem joga só confirma presença pelo link.</p>
+        <p class="field-note text-center">Você cadastra seus grupos, jogadores e jogos. Quem joga só confirma presença pelo link. Se alguém te colocou como administrador de um grupo, use o mesmo WhatsApp.</p>
     </form>
     <?php endif; ?>
 </div>

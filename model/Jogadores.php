@@ -179,16 +179,16 @@ class Jogadores extends Conect
 
     /**
      * Dados pessoais são compartilhados entre grupos. Só altera se a pessoa não
-     * estiver em grupos de outros administradores — senão cada admin só mexe no
+     * estiver em grupos que o usuário não administra — senão cada admin só mexe no
      * que é do vínculo dele (score, convite, situação).
      */
     private function atualizaPessoa($idJogador, $nome, $whatsapp, $instagram, $nascimento)
     {
         $stmt = $this->_conexao->prepare(
             'SELECT 1 FROM grupos_jogadores gj JOIN grupos g ON g.id = gj.id_grupo
-             WHERE gj.id_jogador = ? AND g.id_usuario <> ? LIMIT 1'
+             WHERE gj.id_jogador = ? AND NOT ' . $this->sqlAdminDoGrupo('g') . ' LIMIT 1'
         );
-        $stmt->execute([(int) $idJogador, $this->idUsuario()]);
+        $stmt->execute([(int) $idJogador, $this->idUsuario(), $this->idUsuario()]);
 
         if ($stmt->fetch()) {
             return;

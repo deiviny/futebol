@@ -6,9 +6,10 @@ namespace Model;
  * Classe base dos models: conexão PDO e regras comuns de segurança (multi-tenant).
  *
  * Multi-tenant neste sistema: cada administrador (usuarios.id) só enxerga os
- * próprios grupos e tudo que está dentro deles (jogadores do grupo, jogos,
- * presenças, times e pagamentos). Arenas são a exceção: são públicas para uso,
- * mas só o criador edita.
+ * grupos que administra e tudo que está dentro deles (jogadores do grupo, jogos,
+ * presenças, times e pagamentos). Administra o grupo quem o criou (grupos.id_usuario)
+ * e quem tem o WhatsApp na lista grupos_admins. Arenas são a exceção: são públicas
+ * para uso, mas só o criador edita.
  */
 class Conect
 {
@@ -56,13 +57,25 @@ class Conect
         }
     }
 
-    /** Grupo do administrador logado, ou erro. ⚠️ Multi-tenant: sempre filtra por id_usuario. */
+    /**
+     * Condição SQL "o usuário logado administra o grupo {$alias}": é o dono ou o WhatsApp
+     * dele está na lista de administradores. Usa dois "?" — passe idUsuario() duas vezes.
+     */
+    protected function sqlAdminDoGrupo($alias = 'g')
+    {
+        return "({$alias}.id_usuario = ? OR EXISTS (
+                    SELECT 1 FROM grupos_admins ga JOIN usuarios ua ON ua.telefone = ga.telefone
+                    WHERE ga.id_grupo = {$alias}.id AND ua.id = ?))";
+    }
+
+    /** Grupo que o administrador logado administra, ou erro. ⚠️ Multi-tenant: sempre passa por sqlAdminDoGrupo(). */
     protected function grupoDoUsuario($idGrupo)
     {
         $stmt = $this->conecta()->prepare(
-            "SELECT * FROM grupos WHERE id = ? AND id_usuario = ? AND excluido = 'n'"
+            "SELECT g.*, (g.id_usuario = ?) AS dono FROM grupos g
+             WHERE g.id = ? AND " . $this->sqlAdminDoGrupo('g') . " AND g.excluido = 'n'"
         );
-        $stmt->execute([(int) $idGrupo, $this->idUsuario()]);
+        $stmt->execute([$this->idUsuario(), (int) $idGrupo, $this->idUsuario(), $this->idUsuario()]);
         $grupo = $stmt->fetch();
 
         $this->exige($grupo, 'Grupo não encontrado.');
@@ -72,7 +85,7 @@ class Conect
 
     /**
      * Jogo (com dados do grupo e da arena) do administrador logado, ou erro.
-     * ⚠️ Multi-tenant: o jogo só vale se o grupo dele pertencer ao usuário.
+     * ⚠️ Multi-tenant: o jogo só vale se o usuário administrar o grupo dele.
      */
     protected function jogoDoUsuario($idJogo)
     {
@@ -81,11 +94,11 @@ class Conect
                     g.colete1_nome, g.colete1_cor, g.colete2_nome, g.colete2_cor,
                     a.nome AS arena_nome, a.endereco AS arena_endereco, a.url_mapa AS arena_url_mapa, a.valor AS arena_valor
              FROM jogos jo
-             JOIN grupos g ON g.id = jo.id_grupo AND g.id_usuario = ? AND g.excluido = 'n'
+             JOIN grupos g ON g.id = jo.id_grupo AND " . $this->sqlAdminDoGrupo('g') . " AND g.excluido = 'n'
              LEFT JOIN arenas a ON a.id = jo.id_arena
              WHERE jo.id = ?"
         );
-        $stmt->execute([$this->idUsuario(), (int) $idJogo]);
+        $stmt->execute([$this->idUsuario(), $this->idUsuario(), (int) $idJogo]);
         $jogo = $stmt->fetch();
 
         $this->exige($jogo, 'Jogo não encontrado.');

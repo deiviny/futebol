@@ -53,17 +53,23 @@ class Login extends Conect
         $nome = trim(isset($dados['nome']) ? $dados['nome'] : '');
         $email = mb_strtolower(trim(isset($dados['email']) ? $dados['email'] : ''));
         $senha = isset($dados['senha']) ? (string) $dados['senha'] : '';
+        $telefone = Jogadores::normalizaWhatsapp(isset($dados['telefone']) ? $dados['telefone'] : '');
 
         $this->exige($nome !== '' && mb_strlen($nome) <= 120, 'Informe seu nome.');
         $this->exige(filter_var($email, FILTER_VALIDATE_EMAIL) && strlen($email) <= 150, 'Informe um e-mail válido.');
+        $this->exige($telefone !== null, 'Informe seu WhatsApp com DDD (ex.: 62 99999-8888).');
         $this->exige(strlen($senha) >= 8, 'A senha precisa ter pelo menos 8 caracteres.');
 
         $stmt = $this->_conexao->prepare('SELECT id FROM usuarios WHERE email = ?');
         $stmt->execute([$email]);
         $this->exige(!$stmt->fetch(), 'Já existe uma conta com esse e-mail.');
 
-        $stmt = $this->_conexao->prepare('INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)');
-        $stmt->execute([$nome, $email, password_hash($senha, PASSWORD_DEFAULT)]);
+        $stmt = $this->_conexao->prepare('SELECT id FROM usuarios WHERE telefone = ?');
+        $stmt->execute([$telefone]);
+        $this->exige(!$stmt->fetch(), 'Já existe uma conta com esse WhatsApp.');
+
+        $stmt = $this->_conexao->prepare('INSERT INTO usuarios (nome, email, telefone, senha) VALUES (?, ?, ?, ?)');
+        $stmt->execute([$nome, $email, $telefone, password_hash($senha, PASSWORD_DEFAULT)]);
 
         return $this->paraSessao([
             'id' => (int) $this->_conexao->lastInsertId(),
