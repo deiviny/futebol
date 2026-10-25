@@ -23,9 +23,17 @@ CREATE TABLE IF NOT EXISTS jogos_fila (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Jogos que já tinham times esperando: os jogadores passam para a lista, na mesma ordem.
+-- (Contagem em subconsulta em vez de ROW_NUMBER(): o MySQL 5.7 da hospedagem não tem window functions.)
 INSERT INTO jogos_fila (id_jogo, id_jogador, ordem, score)
 SELECT t.id_jogo, tj.id_jogador,
-       ROW_NUMBER() OVER (PARTITION BY t.id_jogo ORDER BY t.posicao, t.id, tj.ordem),
+       (SELECT COUNT(*)
+          FROM jogos_times t2
+          JOIN jogos_times_jogadores tj2 ON tj2.id_time = t2.id
+         WHERE t2.colete IS NULL
+           AND t2.id_jogo = t.id_jogo
+           AND (t2.posicao < t.posicao
+                OR (t2.posicao = t.posicao AND (t2.id < t.id
+                    OR (t2.id = t.id AND tj2.ordem <= tj.ordem))))),
        tj.score
 FROM jogos_times t
 JOIN jogos_times_jogadores tj ON tj.id_time = t.id
