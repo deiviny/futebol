@@ -23,7 +23,7 @@ $acoesNav = '<button class="nav-btn forte" type="button" id="btnNovaArena">' . i
                 <input type="hidden" name="id" id="arenaId">
                 <div class="inset-list">
                     <div class="field-row"><label for="arenaNome">Nome</label><input id="arenaNome" name="nome" type="text" maxlength="120" placeholder="Ex.: Arena Society" required></div>
-                    <div class="field-row"><label for="arenaValor">Valor</label><input id="arenaValor" name="valor" type="text" inputmode="decimal" placeholder="0,00"></div>
+                    <div class="field-row"><label for="arenaValor">Valor</label><input id="arenaValor" name="valor" type="text" inputmode="numeric" data-mascara="moeda" placeholder="0,00"></div>
                     <div class="field-row"><label for="arenaEndereco">Endereço</label><input id="arenaEndereco" name="endereco" type="text" maxlength="255" placeholder="Rua, número, bairro" required></div>
                     <div class="field-row"><label for="arenaMapa">Mapa</label><input id="arenaMapa" name="url_mapa" type="url" maxlength="500" placeholder="Link do Google Maps"></div>
                 </div>

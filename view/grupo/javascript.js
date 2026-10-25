@@ -66,7 +66,16 @@ $(function () {
 
     // ---------- ajustes do grupo ----------
     function alternaFixo() { $('#blocoFixo').toggleClass('hidden', !$('#gRecorrente').is(':checked')); }
-    function alternaPix() { $('#blocoPix').toggleClass('hidden', !$('#gPixTipo').val()); }
+    function alternaPix() {
+        var tipo = $('#gPixTipo').val(), $chave = $('#gPixChave');
+        $('#blocoPix').toggleClass('hidden', !tipo);
+        // Chave do tipo celular ganha a máscara de telefone.
+        if (tipo === 'celular') {
+            $chave.attr({ 'data-mascara': 'telefone', inputmode: 'tel', placeholder: '(62) 99999-8888' }).val(mascaraTelefone($chave.val()));
+        } else {
+            $chave.removeAttr('data-mascara').attr({ inputmode: 'text', placeholder: 'Sua chave Pix' });
+        }
+    }
     $('#gRecorrente').on('change', alternaFixo);
     $('#gPixTipo').on('change', alternaPix);
     alternaFixo(); alternaPix();

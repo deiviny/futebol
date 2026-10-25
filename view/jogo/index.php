@@ -71,7 +71,7 @@ $acoesNav = '<button type="button" class="nav-btn hidden" id="btnEditarJogo">Edi
             </div>
             <div class="sheet-body">
                 <div class="inset-list">
-                    <div class="field-row"><label for="fValor">Total</label><input id="fValor" name="valor_total" type="text" inputmode="decimal" placeholder="R$ 0,00" required></div>
+                    <div class="field-row"><label for="fValor">Total</label><input id="fValor" name="valor_total" type="text" inputmode="numeric" data-mascara="moeda" placeholder="R$ 0,00" required></div>
                 </div>
                 <div class="field-note" id="fPreview">&nbsp;</div><div class="field-note" id="fAviso" style="color:var(--orange-text)"></div><div class="field-note">Informe quanto custou a quadra. O valor é dividido entre quem jogou.</div>
                 <div class="input-erro" id="erroFinalizar" role="alert"></div>

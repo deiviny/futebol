@@ -28,7 +28,7 @@ $(function () {
         $('#tituloArena').text(a ? 'Editar arena' : 'Nova arena');
         $('#arenaId').val(a ? a.id : '');
         $('#arenaNome').val(a ? a.nome : '');
-        $('#arenaValor').val(a && a.valor > 0 ? String(a.valor).replace('.', ',') : '');
+        $('#arenaValor').val(a && a.valor > 0 ? valorCampoMoeda(a.valor) : '');
         $('#arenaEndereco').val(a ? a.endereco : '');
         $('#arenaMapa').val(a ? (a.url_mapa || '') : '');
         $('#btnExcluirArena').toggleClass('hidden', !a);

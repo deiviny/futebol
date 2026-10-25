@@ -749,7 +749,7 @@ $(function () {
     }
 
     function atualizaPreview() {
-        var v = parseFloat(String($('#fValor').val()).replace(/\./g, '').replace(',', '.'));
+        var v = lerMoeda($('#fValor').val());
         var n = quantosPagam();
         if (!v || v <= 0 || !n) { $('#fPreview').html('Dividido igualmente entre quem jogou (' + nomeTime(n) + ').'); return; }
         var por = Math.ceil(v * 100 / n) / 100;
@@ -758,7 +758,7 @@ $(function () {
 
     function abreFinalizar() {
         var atual = J.fechamento ? J.fechamento.valor_total : (J.arena && J.arena.valor > 0 ? J.arena.valor : '');
-        $('#fValor').val(atual === '' ? '' : String(atual).replace('.', ','));
+        $('#fValor').val(valorCampoMoeda(atual));
         $('#tituloFinalizar').text(J.fechamento ? 'Corrigir valor' : 'Fechar jogo');
         atualizaPreview();
         var semTime = J.sem_time ? J.sem_time.length : 0;
@@ -767,7 +767,8 @@ $(function () {
         if (!J.pix_configurado) { $('#erroFinalizar').text('Cadastre a chave Pix do grupo (Grupo › Ajustes) antes de gerar o código.'); }
     }
 
-    $('#fValor').on('input', atualizaPreview);
+    // Delegado (depois do de app.js): roda com a máscara já aplicada.
+    $(document).on('input', '#fValor', atualizaPreview);
     $('#modalFinalizar').on('shown.bs.modal', function () { $('#fValor').trigger('focus').select(); });
 
     $('#formFinalizar').on('submit', function (e) {

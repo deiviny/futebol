@@ -142,3 +142,44 @@ function chipSituacao(situacao) {
     var m = mapa[situacao] || ['', situacao];
     return '<span class="chip ' + m[0] + '">' + m[1] + '</span>';
 }
+
+// ---------- máscaras ----------
+
+/** Telefone enquanto digita: "62999998888" => "(62) 99999-8888" (fixo com 10 dígitos: "(62) 3333-4444"). */
+function mascaraTelefone(texto) {
+    var n = String(texto || '').replace(/\D/g, '');
+    if (n.length > 11 && n.indexOf('55') === 0) { n = n.substring(2); }
+    n = n.substring(0, 11);
+    if (n.length <= 2) { return n.length ? '(' + n : ''; }
+    var meio = n.length === 11 ? 5 : 4;
+    var h = '(' + n.substring(0, 2) + ') ' + n.substring(2, 2 + meio);
+    return n.length > 2 + meio ? h + '-' + n.substring(2 + meio) : h;
+}
+
+/** Valor enquanto digita, como em app de banco: os dígitos entram pelos centavos. "12345" => "123,45". */
+function mascaraMoeda(texto) {
+    var n = String(texto || '').replace(/\D/g, '').replace(/^0+/, '').substring(0, 9);
+    if (!n) { return ''; }
+    n = ('00' + n).slice(-Math.max(3, n.length));
+    var inteiro = n.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return inteiro + ',' + n.slice(-2);
+}
+
+/** Número para o campo de valor: 200 => "200,00". */
+function valorCampoMoeda(numero) {
+    return numero ? mascaraMoeda(Math.round(Number(numero) * 100)) : '';
+}
+
+/** Campo de valor (com máscara) => número: "1.234,50" => 1234.5 */
+function lerMoeda(texto) {
+    var v = parseFloat(String(texto || '').replace(/[^\d,]/g, '').replace(',', '.'));
+    return isNaN(v) ? 0 : v;
+}
+
+// Todo input type="tel" e todo campo com data-mascara="telefone" | "moeda" recebe a máscara ao digitar.
+$(document).on('input', 'input[type=tel], input[data-mascara=telefone]', function () {
+    this.value = mascaraTelefone(this.value);
+});
+$(document).on('input', 'input[data-mascara=moeda]', function () {
+    this.value = mascaraMoeda(this.value);
+});

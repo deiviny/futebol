@@ -132,10 +132,13 @@ class Conect
         );
     }
 
-    /** Número decimal vindo do formulário ("15", "15.5" ou "15,5"). */
+    /** Número decimal vindo do formulário ("15", "15.5", "15,5" ou com máscara: "R$ 1.234,50"). */
     protected function decimal($valor)
     {
-        $valor = str_replace(',', '.', trim((string) $valor));
+        $valor = preg_replace('/[^\d,.\-]/', '', (string) $valor);
+        if (strpos($valor, ',') !== false) {
+            $valor = str_replace(['.', ','], ['', '.'], $valor); // vírgula decimal: ponto é milhar
+        }
 
         return is_numeric($valor) ? (float) $valor : null;
     }

@@ -44,7 +44,7 @@ $(function () {
                 '<button class="btn-plain mt-3" id="btnMudar">Mudar resposta</button></div>' + listaNomes();
         } else {
             h += '<form id="formResposta" autocomplete="on"><div class="sec-title">Seu WhatsApp</div><div class="inset-list">' +
-                '<div class="field-row"><label for="rWhats">WhatsApp</label><input id="rWhats" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" placeholder="(62) 99999-8888" value="' + esc(memoria.whatsapp) + '" required></div>' +
+                '<div class="field-row"><label for="rWhats">WhatsApp</label><input id="rWhats" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" placeholder="(62) 99999-8888" value="' + esc(mascaraTelefone(memoria.whatsapp)) + '" required></div>' +
                 '<div class="field-row hidden" id="linhaNome"><label for="rNome">Seu nome</label><input id="rNome" name="nome" type="text" maxlength="120" autocomplete="name" placeholder="Como te chamam"></div></div>' +
                 '<div class="field-note" id="notaNome">Use o número que o administrador cadastrou para você.</div>' +
                 '<div class="input-erro" id="erroResposta" role="alert"></div>' +
