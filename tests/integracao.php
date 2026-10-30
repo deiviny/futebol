@@ -570,6 +570,29 @@ confere('data inválida recusada', erro(function () use ($jogos, $idGrupo) { $jo
 $jogos->excluir($idManual);
 confere('jogo avulso pode ser excluído', erro(function () use ($jogos, $idManual) { $jogos->detalhe($idManual); }) !== null);
 
+echo "Sorteio com 3 e 4 times\n";
+$idsQuatro = [];
+for ($i = 0; $i < 13; $i++) {
+    $idsQuatro[] = $j1->salvar(['id_grupo' => $idGrupo, 'nome' => 'Q' . $i, 'whatsapp' => '6296' . str_pad((string) (1000 + $i), 4, '0', STR_PAD_LEFT) . '00', 'score' => $i % 10]);
+}
+$idQuatro = $jogos->criar(['id_grupo' => $idGrupo, 'data' => date('Y-m-d', strtotime('+3 days')), 'hora' => '19:30', 'jogadores_por_time' => 3]);
+foreach (array_slice($idsQuatro, 0, 10) as $q) {
+    $pres->responder($idQuatro, $q, 'confirmado');
+    $pres->chegada($idQuatro, $q, true);
+}
+(new Times($u1))->sortear($idQuatro);
+$d3 = $jogos->detalhe($idQuatro);
+confere('10 chegaram, 3 por time: 3 times (2 em quadra + 1 inteiro na lista) e 1 sobra', count($d3['times']) === 2 && count($d3['times'][0]['jogadores']) === 3 && count($d3['fila']) === 4);
+foreach (array_slice($idsQuatro, 10, 3) as $q) {
+    $pres->responder($idQuatro, $q, 'confirmado');
+    $pres->chegada($idQuatro, $q, true);
+}
+(new Times($u1))->sortear($idQuatro);
+$d3 = $jogos->detalhe($idQuatro);
+confere('13 chegaram, 3 por time: no máximo 4 times (2 em quadra, 6 na lista) e 1 sobra no fim', count($d3['times']) === 2 && count($d3['fila']) === 7 && $d3['fila'][6]['id_jogador'] === $idsQuatro[12]);
+$emQuadra = array_merge(array_column($d3['times'][0]['jogadores'], 'id_jogador'), array_column($d3['times'][1]['jogadores'], 'id_jogador'));
+confere('ninguém repetido entre quadra e lista', count(array_unique(array_merge($emQuadra, array_column($d3['fila'], 'id_jogador')))) === 13);
+
 echo "Jogador com histórico\n";
 confere('remover jogador com histórico só inativa', $j1->remover($idGrupo, $idsJog['Ana']) === 'inativado');
 $novo = $j1->salvar(['id_grupo' => $idGrupo, 'nome' => 'Sem Historico', 'whatsapp' => '62977776666']);

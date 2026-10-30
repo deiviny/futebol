@@ -17,6 +17,9 @@ class Times extends Conect
     /** Cor dos times que estão na fila (sem colete). */
     const COR_FILA = '#8E8E93';
 
+    /** Com gente para isso na chegada, o sorteio já forma até este número de times (ex.: 4 x 6 = 24). */
+    const MAX_TIMES_SORTEIO = 4;
+
     private $_conexao;
 
     public function __construct($sess_usuario)
@@ -27,6 +30,12 @@ class Times extends Conect
 
     /**
      * Sorteia (ou sorteia de novo, substituindo o sorteio anterior).
+     *
+     * Com até 3 times completos de gente, os primeiros 2 x (por time) a chegar viram dois times
+     * equilibrados e o resto espera na lista. Com 3 ou 4 times completos (ex.: 24 chegaram, 6 por
+     * time), o sorteio já equilibra 3 ou 4 times: os dois que chegaram antes (em média) entram
+     * em quadra e os outros vão para a lista, um time inteiro depois do outro, seguidos de quem
+     * chegou além disso.
      *
      * @return int quantos jogadores ficaram na lista de espera
      */
@@ -58,17 +67,38 @@ class Times extends Conect
         $porTime = (int) $jogo['jogadores_por_time'];
         $ids = array_keys($scores); // ordem de chegada
 
-        // Primeira formação: os primeiros a chegar, em dois times equilibrados pelo score.
-        $primeiros = array_slice($ids, 0, $porTime * 2);
+        $posicao = array_flip($ids); // idJogador => posição na ordem de chegada (0, 1, 2…)
+        $qtdTimes = max(2, min(self::MAX_TIMES_SORTEIO, intdiv(count($ids), max(1, $porTime))));
+
+        // Primeira formação: os primeiros a chegar, em times equilibrados pelo score.
+        $primeiros = array_slice($ids, 0, $porTime * $qtdTimes);
         $parcial = [];
         foreach ($primeiros as $id) {
             $parcial[$id] = $scores[$id];
         }
-        $times = (new Sorteio())->balancear($parcial, 2, $semente);
+        $times = (new Sorteio())->balancear($parcial, $qtdTimes, $semente);
 
-        // Quem chegou depois espera na lista, na ordem de chegada.
-        $espera = array_slice($ids, $porTime * 2);
-        $posicao = array_flip($ids); // idJogador => posição na ordem de chegada (0, 1, 2…)
+        if ($qtdTimes > 2) {
+            // Entram em quadra os dois times que chegaram antes, na média.
+            usort($times, function ($x, $y) use ($posicao) {
+                $media = function ($t) use ($posicao) {
+                    return array_sum(array_map(function ($id) use ($posicao) { return $posicao[$id]; }, $t)) / max(1, count($t));
+                };
+                return $media($x) <=> $media($y);
+            });
+        }
+
+        // Os times sorteados além dos dois primeiros esperam inteiros na lista, um depois
+        // do outro; depois deles, quem chegou além disso, na ordem de chegada.
+        $espera = [];
+        foreach (array_slice($times, 2) as $time) {
+            usort($time, function ($x, $y) use ($posicao) {
+                return $posicao[$x] <=> $posicao[$y];
+            });
+            $espera = array_merge($espera, $time);
+        }
+        $espera = array_merge($espera, array_slice($ids, $porTime * $qtdTimes));
+        $times = array_slice($times, 0, 2);
 
         $this->_conexao->beginTransaction();
         try {
@@ -107,8 +137,8 @@ class Times extends Conect
             $novoNaFila = $this->_conexao->prepare(
                 'INSERT INTO jogos_fila (id_jogo, id_jogador, ordem, score) VALUES (?, ?, ?, ?)'
             );
-            foreach ($espera as $idJogador) {
-                $novoNaFila->execute([(int) $jogo['id'], (int) $idJogador, $posicao[$idJogador] + 1, $scores[$idJogador]]);
+            foreach ($espera as $i => $idJogador) {
+                $novoNaFila->execute([(int) $jogo['id'], (int) $idJogador, $porTime * 2 + $i + 1, $scores[$idJogador]]);
             }
 
             $stmt = $this->_conexao->prepare("UPDATE jogos SET situacao = 'em_andamento' WHERE id = ?");

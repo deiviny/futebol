@@ -111,6 +111,7 @@ $(function () {
         var h = '<div class="sec-head-lg">Sorteio</div>' +
             '<div class="card-ios"><h3>Sorteio dos times</h3><p>Marque “Chegou” para cada jogador na ordem em que chegam. ' +
             'Os primeiros ' + (J.jogadores_por_time * 2) + ' formam os dois primeiros times, equilibrados pelo score (o sorteio por score vale só para essa primeira formação). ' +
+            'Se chegar gente para 3 ou 4 times completos (até ' + (J.jogadores_por_time * 4) + '), o sorteio já equilibra todos: os dois que chegaram antes entram em quadra e os outros esperam inteiros na lista. ' +
             'Cada time veste um dos coletes do grupo (' + esc(J.coletes[0].nome) + ' e ' + esc(J.coletes[1].nome) + '). ' +
             'Quem chegou depois entra na lista de espera, na ordem de chegada, e a lista manda nas próximas partidas.</p></div>' +
             '<button class="btn-ios bloco mt-2" data-act="sortear"' + (J.chegaram < 2 ? ' disabled' : '') + '>Sortear times (' + J.chegaram + ' chegaram)</button>';
