@@ -8,6 +8,9 @@ namespace Model;
  */
 class Jogos extends Conect
 {
+    /** A lista do grupo abre vagas até completar este número de times (ex.: 4 x 6 = 24). */
+    const TIMES_NA_LISTA = 4;
+
     private $_conexao;
 
     public function __construct($sess_usuario)
@@ -249,7 +252,7 @@ class Jogos extends Conect
     /**
      * Lista de confirmados pronta para colar no grupo do WhatsApp, no formato que o pessoal usa:
      * título com o dia, local, horário, jogadores numerados (com vagas em branco até fechar
-     * os dois primeiros times) e os goleiros.
+     * TIMES_NA_LISTA times) e os goleiros.
      */
     private function textoLista(array $jogo)
     {
@@ -272,7 +275,7 @@ class Jogos extends Conect
         $linhas[] = '🕗 ' . date('H:i', $t);
         $linhas[] = '';
 
-        $vagas = max(count($nomes), 2 * (int) $jogo['jogadores_por_time']);
+        $vagas = max(count($nomes), self::TIMES_NA_LISTA * (int) $jogo['jogadores_por_time']);
         for ($i = 0; $i < $vagas; $i++) {
             $linhas[] = ($i + 1) . '. ' . (isset($nomes[$i]) ? $nomes[$i]['nome'] : '');
         }
