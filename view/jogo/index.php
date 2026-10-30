@@ -71,10 +71,34 @@ $acoesNav = '<button type="button" class="nav-btn hidden" id="btnEditarJogo">Edi
             </div>
             <div class="sheet-body">
                 <div class="inset-list">
-                    <div class="field-row"><label for="fValor">Total</label><input id="fValor" name="valor_total" type="text" inputmode="numeric" data-mascara="moeda" placeholder="R$ 0,00" required></div>
+                    <div class="field-row"><label for="fValor">Quadra</label><input id="fValor" name="valor_total" type="text" inputmode="numeric" data-mascara="moeda" placeholder="R$ 0,00" required></div>
+                    <div class="field-row"><label for="fGolQtd">Goleiros</label><input id="fGolQtd" type="number" min="0" max="6" inputmode="numeric" placeholder="0"></div>
+                    <div class="field-row" id="linhaFGolValor"><label for="fGolValor">Cada goleiro</label><input id="fGolValor" type="text" inputmode="numeric" data-mascara="moeda" placeholder="R$ 0,00"></div>
                 </div>
-                <div class="field-note" id="fPreview">&nbsp;</div><div class="field-note" id="fAviso" style="color:var(--orange-text)"></div><div class="field-note">Informe quanto custou a quadra. O valor é dividido entre quem jogou.</div>
+                <div class="field-note" id="fPreview">&nbsp;</div><div class="field-note" id="fAviso" style="color:var(--orange-text)"></div><div class="field-note">Informe quanto custou a quadra e os goleiros contratados. O total é dividido entre quem jogou.</div>
                 <div class="input-erro" id="erroFinalizar" role="alert"></div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Folha: goleiros contratados -->
+<div class="modal fade" id="modalGoleiros" tabindex="-1" role="dialog" aria-labelledby="tituloGoleiros" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <form class="modal-content" id="formGoleiros" autocomplete="off">
+            <div class="sheet-header">
+                <button type="button" class="btn-plain" data-dismiss="modal">Cancelar</button>
+                <h2 id="tituloGoleiros">Goleiros contratados</h2>
+                <button type="submit" class="btn-plain">Salvar</button>
+            </div>
+            <div class="sheet-body">
+                <div class="inset-list">
+                    <div class="field-row"><label for="gQtd">Quantidade</label><input id="gQtd" name="goleiros_qtd" type="number" min="0" max="6" inputmode="numeric" required></div>
+                    <div class="field-row"><label for="gValor">Cada um</label><input id="gValor" name="goleiros_valor" type="text" inputmode="numeric" data-mascara="moeda" placeholder="R$ 0,00"></div>
+                    <div class="field-row"><label for="gNomes">Nomes</label><input id="gNomes" name="goleiros_nomes" type="text" maxlength="200" placeholder="Opcional, separados por vírgula"></div>
+                </div>
+                <div class="field-note">O valor dos goleiros soma com a quadra no fechamento e é dividido entre quem jogou. Os nomes aparecem na lista copiada para o grupo.</div>
+                <div class="input-erro" id="erroGoleiros" role="alert"></div>
             </div>
         </form>
     </div>

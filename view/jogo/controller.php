@@ -127,8 +127,17 @@ try {
             $output['mensagem'] = 'Partida descartada';
             break;
 
+        case 'goleiros':
+            $jogos->salvarGoleiros($id, $_POST);
+            $output['mensagem'] = 'Goleiros salvos';
+            break;
+
         case 'finalizar':
-            (new Pagamentos($sess))->finalizar($id, isset($_POST['valor_total']) ? $_POST['valor_total'] : '');
+            (new Pagamentos($sess))->finalizar(
+                $id,
+                isset($_POST['valor_total']) ? $_POST['valor_total'] : '',
+                isset($_POST['goleiros_qtd']) ? $_POST : null
+            );
             $output['mensagem'] = 'Jogo finalizado. Código Pix gerado';
             break;
 

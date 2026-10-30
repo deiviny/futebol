@@ -17,12 +17,13 @@ class Pagamentos extends Conect
     }
 
     /**
-     * Informa o valor total, divide entre os jogadores, gera o Pix e finaliza o jogo.
-     * Pode ser repetido para corrigir o valor, enquanto ninguém estiver marcado como pago.
+     * Informa o valor da quadra, divide (quadra + goleiros contratados) entre os jogadores,
+     * gera o Pix e finaliza o jogo. Pode ser repetido para corrigir o valor, enquanto
+     * ninguém estiver marcado como pago. $goleiros (opcional) atualiza os goleiros antes.
      *
      * @return array ['valor_por_jogador' => float, 'jogadores' => int, 'codigo_pix' => string]
      */
-    public function finalizar($idJogo, $valorTotal)
+    public function finalizar($idJogo, $valorTotal, $goleiros = null)
     {
         $jogo = $this->jogoDoUsuario($idJogo);
         $this->exige($jogo['situacao'] !== 'cancelado', 'Este jogo está cancelado.');
@@ -49,14 +50,20 @@ class Pagamentos extends Conect
         $jogadores = $this->quemJogou((int) $jogo['id']);
         $this->exige($jogadores, 'Ninguém jogou ainda: marque as chegadas e sorteie os times.');
 
-        // Divisão em centavos, arredondando para cima para a quadra nunca ficar no prejuízo.
-        $centavos = (int) round($total * 100);
-        $porJogador = (int) ceil($centavos / count($jogadores)) / 100;
-
-        $codigo = PixPayload::gerar($jogo['pix_chave'], $jogo['pix_nome'], $jogo['pix_cidade'], $porJogador);
-
         $this->_conexao->beginTransaction();
         try {
+            if (is_array($goleiros)) {
+                (new Jogos($this->sess_usuario))->gravaGoleiros((int) $jogo['id'], $goleiros);
+                $jogo = $this->jogoDoUsuario($idJogo);
+            }
+            $totalGoleiros = Jogos::goleiros($jogo)['total'];
+
+            // Divisão em centavos, arredondando para cima para a quadra nunca ficar no prejuízo.
+            $centavos = (int) round(($total + $totalGoleiros) * 100);
+            $porJogador = (int) ceil($centavos / count($jogadores)) / 100;
+
+            $codigo = PixPayload::gerar($jogo['pix_chave'], $jogo['pix_nome'], $jogo['pix_cidade'], $porJogador);
+
             $stmt = $this->_conexao->prepare(
                 "UPDATE jogos SET situacao = 'finalizado', valor_total = ?, valor_por_jogador = ?,
                         codigo_pix = ?, finalizado_em = ? WHERE id = ?"
@@ -100,8 +107,11 @@ class Pagamentos extends Conect
     /** Texto para colar no WhatsApp: resumo + código Pix. */
     public static function mensagem(array $jogo)
     {
+        $g = Jogos::goleiros($jogo);
+        $goleiros = $g['qtd'] ? ' + ' . $g['qtd'] . ($g['qtd'] === 1 ? ' goleiro ' : ' goleiros ') . moeda($g['total']) : '';
+
         return "⚽ *" . $jogo['grupo_nome'] . "* — " . dataHoraBr($jogo['data_hora']) . "\n"
-            . 'Quadra: ' . moeda($jogo['valor_total']) . ' · *' . moeda($jogo['valor_por_jogador']) . " por jogador*\n\n"
+            . 'Quadra: ' . moeda($jogo['valor_total']) . $goleiros . ' · *' . moeda($jogo['valor_por_jogador']) . " por jogador*\n\n"
             . "Pix copia e cola:\n" . $jogo['codigo_pix'];
     }
 

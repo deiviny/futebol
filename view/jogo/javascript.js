@@ -405,8 +405,22 @@ $(function () {
         return h;
     }
 
+    function cardGoleiros() {
+        var g = J.goleiros;
+        var resumo = g.qtd
+            ? g.qtd + (g.qtd === 1 ? ' goleiro' : ' goleiros') + ' · ' + moeda(g.valor) + ' cada (' + moeda(g.total) + ')'
+            : 'Nenhum goleiro contratado';
+        return '<div class="sec-title">Goleiros contratados</div><div class="inset-list"><div class="row-item">' +
+            '<div class="row-main"><div class="row-title">' + esc(resumo) + '</div>' +
+            (g.nomes.length ? '<div class="row-sub wrap">' + esc(g.nomes.join(', ')) + '</div>' : '') + '</div>' +
+            '<div class="row-end"><button class="btn-ios peq sec" data-act="goleiros">' + (g.qtd ? 'Alterar' : 'Informar') + '</button></div></div></div>' +
+            '<div class="sec-foot">O valor dos goleiros entra junto com a quadra na divisão do fechamento.</div>';
+    }
+
     function partListas() {
         var h = '';
+        h += '<div class="btn-row mt-3"><button class="btn-ios sec" data-act="copiar-lista">Copiar lista</button>' +
+            '<a class="btn-ios verde" target="_blank" rel="noopener" href="' + esc(whatsappLink(J.texto_lista)) + '">Enviar lista no WhatsApp</a></div>';
         h += '<div class="stat-row mt-3">' +
             '<div class="stat"><b>' + J.confirmados.length + '</b><small>Confirmados</small></div>' +
             '<div class="stat"><b>' + J.chegaram + '</b><small>Chegaram</small></div>' +
@@ -442,6 +456,8 @@ $(function () {
             h += '</div><div class="sec-foot">Quem chegar sem ter confirmado: toque em “Vai” e depois em “Chegou”.</div>';
         }
 
+        h += cardGoleiros();
+
         // Recusados
         if (J.recusados.length) {
             h += '<div class="sec-title">Não vão</div><div class="inset-list">';
@@ -460,7 +476,7 @@ $(function () {
         var f = J.fechamento;
         var h = '<div class="sec-head-lg">Cobrança</div>' +
             '<div class="card-ios text-center"><p>Cada jogador paga</p><div class="valor-grande">' + moeda(f.valor_por_jogador) + '</div>' +
-            '<p class="mt-1">Quadra ' + moeda(f.valor_total) + ' · ' + nomeTime(f.total) + '</p>' +
+            '<p class="mt-1">Quadra ' + moeda(f.valor_total) + (J.goleiros.qtd ? ' + ' + J.goleiros.qtd + (J.goleiros.qtd === 1 ? ' goleiro ' : ' goleiros ') + moeda(J.goleiros.total) : '') + ' · ' + nomeTime(f.total) + '</p>' +
             '<div class="mt-2"><span class="chip ' + (f.pagos === f.total ? 'verde' : 'laranja') + '">' + f.pagos + ' de ' + f.total + ' pagaram</span></div></div>';
 
         h += '<div class="sec-title">Pix copia e cola</div><div class="card-ios"><div class="pix-box" id="pixCodigo">' + esc(f.codigo_pix) + '</div>' +
@@ -562,6 +578,12 @@ $(function () {
                 } else {
                     abreFinalizar();
                 }
+                break;
+            case 'copiar-lista':
+                copiar(J.texto_lista, 'Lista copiada. É só colar no grupo');
+                break;
+            case 'goleiros':
+                abreGoleiros();
                 break;
             case 'copiar-link':
                 copiar(J.link_publico, 'Link copiado');
@@ -749,16 +771,22 @@ $(function () {
     }
 
     function atualizaPreview() {
-        var v = lerMoeda($('#fValor').val());
+        var qtd = Math.max(0, parseInt($('#fGolQtd').val(), 10) || 0);
+        $('#linhaFGolValor').toggleClass('hidden', !qtd);
+        var goleiros = qtd * lerMoeda($('#fGolValor').val());
+        var v = lerMoeda($('#fValor').val()) + goleiros;
         var n = quantosPagam();
         if (!v || v <= 0 || !n) { $('#fPreview').html('Dividido igualmente entre quem jogou (' + nomeTime(n) + ').'); return; }
-        var por = Math.ceil(v * 100 / n) / 100;
-        $('#fPreview').html('<b>' + moeda(por) + '</b> por jogador (' + nomeTime(n) + '). Arredonda para cima para a quadra não ficar no prejuízo.');
+        var por = Math.ceil(Math.round(v * 100) / n) / 100;
+        $('#fPreview').html('<b>' + moeda(por) + '</b> por jogador (' + nomeTime(n) + ')' +
+            (goleiros ? ', total ' + moeda(v) + ' com os goleiros' : '') + '. Arredonda para cima para a quadra não ficar no prejuízo.');
     }
 
     function abreFinalizar() {
         var atual = J.fechamento ? J.fechamento.valor_total : (J.arena && J.arena.valor > 0 ? J.arena.valor : '');
         $('#fValor').val(valorCampoMoeda(atual));
+        $('#fGolQtd').val(J.goleiros.qtd || '');
+        $('#fGolValor').val(valorCampoMoeda(J.goleiros.valor));
         $('#tituloFinalizar').text(J.fechamento ? 'Corrigir valor' : 'Fechar jogo');
         atualizaPreview();
         var semTime = J.sem_time ? J.sem_time.length : 0;
@@ -768,14 +796,17 @@ $(function () {
     }
 
     // Delegado (depois do de app.js): roda com a máscara já aplicada.
-    $(document).on('input', '#fValor', atualizaPreview);
+    $(document).on('input', '#fValor, #fGolQtd, #fGolValor', atualizaPreview);
     $('#modalFinalizar').on('shown.bs.modal', function () { $('#fValor').trigger('focus').select(); });
 
     $('#formFinalizar').on('submit', function (e) {
         e.preventDefault();
         $('#erroFinalizar').text('');
         comTrava($('#formFinalizar button[type=submit]'),
-            api('jogo', 'finalizar', { id: JOGO_ID, valor_total: $('#fValor').val() }, { silencioso: true }))
+            api('jogo', 'finalizar', {
+                id: JOGO_ID, valor_total: $('#fValor').val(), goleiros_qtd: $('#fGolQtd').val() || 0,
+                goleiros_valor: $('#fGolValor').val(), goleiros_nomes: J.goleiros.nomes.join(', ')
+            }, { silencioso: true }))
             .done(function (res) {
                 J = res.jogo;
                 $('#modalFinalizar').modal('hide');
@@ -784,6 +815,30 @@ $(function () {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             })
             .fail(function (xhr) { $('#erroFinalizar').text((xhr.responseJSON || {}).error || 'Não foi possível fechar o jogo.'); });
+    });
+
+    // ---------- goleiros contratados ----------
+    function abreGoleiros() {
+        $('#gQtd').val(J.goleiros.qtd);
+        $('#gValor').val(valorCampoMoeda(J.goleiros.valor));
+        $('#gNomes').val(J.goleiros.nomes.join(', '));
+        $('#erroGoleiros').text('');
+        abrirFolha('#modalGoleiros');
+    }
+
+    $('#formGoleiros').on('submit', function (e) {
+        e.preventDefault();
+        $('#erroGoleiros').text('');
+        var dados = Object.fromEntries(new FormData(this));
+        dados.id = JOGO_ID;
+        comTrava($('#formGoleiros button[type=submit]'), api('jogo', 'goleiros', dados, { silencioso: true }))
+            .done(function (res) {
+                J = res.jogo;
+                $('#modalGoleiros').modal('hide');
+                alertTop('success', res.mensagem);
+                render();
+            })
+            .fail(function (xhr) { $('#erroGoleiros').text((xhr.responseJSON || {}).error || 'Não foi possível salvar.'); });
     });
 
     // ---------- editar / sem jogo ----------

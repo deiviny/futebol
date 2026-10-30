@@ -508,6 +508,21 @@ confere('jogador a0: ganhou a 1, perdeu a 2 e V+E+D fecha com o total', $linhaA0
 confere('ranking por período funciona', $part->ranking($idGrupo, 'ano')['totais']['partidas'] === 3 && $part->ranking($idGrupo, '30d')['totais']['partidas'] === 3);
 confere('outro admin não vê o ranking', erro(function () use ($u2, $idGrupo) { (new Partidas($u2))->ranking($idGrupo); }) !== null);
 
+echo "Lista para o grupo e goleiros\n";
+$d = $jogos->detalhe($idJogo);
+$lista = explode("\n", $d['texto_lista']);
+confere('lista começa com o dia da semana', (bool) preg_match('/^FUTEBOL N[AO] \*[A-ZÇÁ-]+\* \(\d{2}\/\d{2}\)$/u', $lista[0]));
+confere('lista numera os confirmados na ordem de confirmação', in_array('1. ' . $d['confirmados'][0]['nome'], $lista, true) || count(array_filter($lista, function ($l) { return preg_match('/^1\. \S/', $l); })) === 1);
+confere('lista termina com os goleiros', in_array('Goleiros:', $lista, true) && end($lista) === '2.');
+confere('goleiro sem valor recusado', erro(function () use ($jogos, $idJogo) { $jogos->salvarGoleiros($idJogo, ['goleiros_qtd' => 2, 'goleiros_valor' => '']); }) !== null);
+confere('outro admin não mexe nos goleiros', erro(function () use ($u2, $idJogo) { (new Jogos($u2))->salvarGoleiros($idJogo, ['goleiros_qtd' => 1, 'goleiros_valor' => '30']); }) !== null);
+$jogos->salvarGoleiros($idJogo, ['goleiros_qtd' => 2, 'goleiros_valor' => '30,00', 'goleiros_nomes' => 'Junior, Paredão']);
+$d = $jogos->detalhe($idJogo);
+confere('goleiros salvos (2 x 30 = 60)', $d['goleiros']['qtd'] === 2 && $d['goleiros']['total'] === 60.0 && $d['goleiros']['nomes'] === ['Junior', 'Paredão']);
+confere('nomes dos goleiros na lista', strpos($d['texto_lista'], "Goleiros:\n1. Junior\n2. Paredão") !== false);
+$jogos->salvarGoleiros($idJogo, ['goleiros_qtd' => 0, 'goleiros_valor' => '30,00']);
+confere('zero goleiros limpa valor e nomes', $jogos->detalhe($idJogo)['goleiros'] === ['qtd' => 0, 'valor' => 0.0, 'total' => 0.0, 'nomes' => []]);
+
 echo "Fechamento\n";
 $pg = new Pagamentos($u1);
 confere('valor inválido recusado', erro(function () use ($pg, $idJogo) { $pg->finalizar($idJogo, 'abc'); }) !== null);
@@ -518,6 +533,12 @@ confere('código pix com valor', strpos($res['codigo_pix'], '540515.39') !== fal
 $d = $jogos->detalhe($idJogo);
 confere('situacao finalizado', $d['situacao'] === 'finalizado' && $d['fechamento']['total'] === 13);
 confere('mensagem do whatsapp inclui o código', strpos($d['fechamento']['mensagem_whatsapp'], $res['codigo_pix']) !== false);
+$res = $pg->finalizar($idJogo, '200,00', ['goleiros_qtd' => 2, 'goleiros_valor' => '30,00']);
+confere('goleiros entram na divisão: (200 + 60) / 13 = R$ 20,00', abs($res['valor_por_jogador'] - 20.0) < 0.001);
+$d = $jogos->detalhe($idJogo);
+confere('mensagem cita os goleiros', strpos($d['fechamento']['mensagem_whatsapp'], '2 goleiros R$ 60,00') !== false);
+confere('jogo fechado: goleiros só pelo “corrigir valor”', erro(function () use ($jogos, $idJogo) { $jogos->salvarGoleiros($idJogo, ['goleiros_qtd' => 1, 'goleiros_valor' => '10']); }) !== null);
+$pg->finalizar($idJogo, '200,00', ['goleiros_qtd' => 0]);
 $pg->marcarPago($idJogo, $idsJog['Ana'], true);
 $pg->marcarPago($idJogo, $idsJog['Bruno'], true);
 $d = $jogos->detalhe($idJogo);

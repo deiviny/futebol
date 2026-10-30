@@ -198,8 +198,94 @@ class Jogos extends Conect
             'sem_time' => $semTime,
             'diferenca' => $diferenca,
             'pix_configurado' => !empty($jogo['pix_chave']),
+            'goleiros' => self::goleiros($jogo),
+            'texto_lista' => $this->textoLista($jogo),
             'fechamento' => $this->fechamento($jogo),
         ]);
+    }
+
+    /** Goleiros contratados do jogo. */
+    public static function goleiros(array $jogo)
+    {
+        $qtd = (int) $jogo['goleiros_qtd'];
+        $valor = (float) $jogo['goleiros_valor'];
+        $nomes = array_values(array_filter(array_map('trim', explode(',', (string) $jogo['goleiros_nomes']))));
+
+        return ['qtd' => $qtd, 'valor' => $valor, 'total' => round($qtd * $valor, 2), 'nomes' => $nomes];
+    }
+
+    public function salvarGoleiros($idJogo, array $dados)
+    {
+        $jogo = $this->jogoDoUsuario($idJogo);
+        $this->exige($jogo['situacao'] !== 'cancelado', 'Este jogo está cancelado.');
+        $this->exige(
+            $jogo['situacao'] !== 'finalizado',
+            'O jogo já foi fechado. Use “Corrigir o valor” para mudar os goleiros.'
+        );
+
+        $this->gravaGoleiros((int) $jogo['id'], $dados);
+    }
+
+    /** Valida e grava quantidade, valor e nomes dos goleiros (também usado no fechamento). */
+    public function gravaGoleiros($idJogo, array $dados)
+    {
+        $qtd = isset($dados['goleiros_qtd']) ? (int) $dados['goleiros_qtd'] : 0;
+        $valor = $this->decimal(isset($dados['goleiros_valor']) ? $dados['goleiros_valor'] : '0');
+        $nomes = trim(isset($dados['goleiros_nomes']) ? (string) $dados['goleiros_nomes'] : '');
+
+        $this->exige($qtd >= 0 && $qtd <= 6, 'Goleiros: de 0 a 6.');
+        $this->exige($valor === null || ($valor >= 0 && $valor <= 99999), 'Valor do goleiro inválido.');
+        $this->exige(mb_strlen($nomes) <= 200, 'Nomes dos goleiros muito longos.');
+        if ($qtd === 0) {
+            $valor = 0;
+            $nomes = '';
+        }
+        $this->exige($qtd === 0 || $valor > 0, 'Informe quanto cada goleiro cobra.');
+
+        $stmt = $this->_conexao->prepare('UPDATE jogos SET goleiros_qtd = ?, goleiros_valor = ?, goleiros_nomes = ? WHERE id = ?');
+        $stmt->execute([$qtd, (float) $valor, $nomes !== '' ? $nomes : null, (int) $idJogo]);
+    }
+
+    /**
+     * Lista de confirmados pronta para colar no grupo do WhatsApp, no formato que o pessoal usa:
+     * título com o dia, local, horário, jogadores numerados (com vagas em branco até fechar
+     * os dois primeiros times) e os goleiros.
+     */
+    private function textoLista(array $jogo)
+    {
+        $nomes = $this->consulta(
+            "SELECT j.nome FROM jogos_presencas p JOIN jogadores j ON j.id = p.id_jogador
+             WHERE p.id_jogo = ? AND p.resposta = 'confirmado'
+             ORDER BY p.confirmado_em ASC, p.id ASC",
+            [(int) $jogo['id']]
+        );
+
+        $t = strtotime($jogo['data_hora']);
+        $dias = ['DOMINGO', 'SEGUNDA-FEIRA', 'TERÇA-FEIRA', 'QUARTA-FEIRA', 'QUINTA-FEIRA', 'SEXTA-FEIRA', 'SÁBADO'];
+        $dia = $dias[(int) date('w', $t)];
+        $artigo = in_array((int) date('w', $t), [0, 6], true) ? 'NO' : 'NA';
+
+        $linhas = ["FUTEBOL {$artigo} *{$dia}* (" . date('d/m', $t) . ')', ''];
+        if ($jogo['arena_nome']) {
+            $linhas[] = '📍' . $jogo['arena_nome'];
+        }
+        $linhas[] = '🕗 ' . date('H:i', $t);
+        $linhas[] = '';
+
+        $vagas = max(count($nomes), 2 * (int) $jogo['jogadores_por_time']);
+        for ($i = 0; $i < $vagas; $i++) {
+            $linhas[] = ($i + 1) . '. ' . (isset($nomes[$i]) ? $nomes[$i]['nome'] : '');
+        }
+
+        $g = self::goleiros($jogo);
+        $linhas[] = '';
+        $linhas[] = 'Goleiros:';
+        $totalG = max($g['qtd'], count($g['nomes']), 2);
+        for ($i = 0; $i < $totalG; $i++) {
+            $linhas[] = ($i + 1) . '. ' . (isset($g['nomes'][$i]) ? $g['nomes'][$i] : '');
+        }
+
+        return implode("\n", array_map('rtrim', $linhas));
     }
 
     /** @return int id do jogo criado */
