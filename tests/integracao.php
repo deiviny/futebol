@@ -274,6 +274,53 @@ sort($esperados);
 confere('dois times = 10 primeiros a chegar', $idsPrimeiros === $esperados);
 confere('quem está na lista não aparece como "sem time"', count($d['sem_time']) === 0);
 
+echo "Arrumar os times à mão\n";
+$t1a = $d['times'][0]['jogadores'][0]['id_jogador'];
+$t2a = $d['times'][1]['jogadores'][0]['id_jogador'];
+$fila0 = $d['fila'][0]['id_jogador'];
+$noTime = function ($d, $idJogador) {
+    foreach ($d['times'] as $i => $t) {
+        if (in_array($idJogador, array_column($t['jogadores'], 'id_jogador'), true)) {
+            return $i;
+        }
+    }
+    return null;
+};
+$timesSvc->trocar($idJogo, $t1a, $t2a);
+$d = $jogos->detalhe($idJogo);
+confere('troca entre os dois times: cada um vai para o time do outro', $noTime($d, $t1a) === 1 && $noTime($d, $t2a) === 0 && count($d['times'][0]['jogadores']) === 5);
+$timesSvc->trocar($idJogo, $t2a, $t1a);
+$timesSvc->trocar($idJogo, $t1a, $fila0);
+$d = $jogos->detalhe($idJogo);
+confere('troca entre time e lista: quem estava na lista entra no time e o outro assume a posição dele', $noTime($d, $fila0) === 0 && $noTime($d, $t1a) === null && $d['fila'][0]['id_jogador'] === $t1a);
+$timesSvc->trocar($idJogo, $fila0, $t1a);
+$d = $jogos->detalhe($idJogo);
+confere('trocar de novo desfaz a troca', $noTime($d, $t1a) === 0 && $d['fila'][0]['id_jogador'] === $fila0 && $d['fila'][1]['id_jogador'] === $idConvidado);
+$timesSvc->trocar($idJogo, $fila0, $idConvidado);
+$d = $jogos->detalhe($idJogo);
+confere('troca dentro da lista inverte as posições', $d['fila'][0]['id_jogador'] === $idConvidado && $d['fila'][1]['id_jogador'] === $fila0);
+$timesSvc->trocar($idJogo, $fila0, $idConvidado);
+confere('não troca com ele mesmo', erro(function () use ($timesSvc, $idJogo, $t1a) { $timesSvc->trocar($idJogo, $t1a, $t1a); }) !== null);
+confere('não troca dois do mesmo time', erro(function () use ($timesSvc, $idJogo, $d) { $timesSvc->trocar($idJogo, $d['times'][0]['jogadores'][0]['id_jogador'], $d['times'][0]['jogadores'][1]['id_jogador']); }) !== null);
+confere('não troca com quem não está no jogo', erro(function () use ($timesSvc, $idJogo, $t1a) { $timesSvc->trocar($idJogo, $t1a, 999999); }) !== null);
+confere('outro admin não troca jogadores', erro(function () use ($u2, $idJogo, $t1a, $t2a) { (new Times($u2))->trocar($idJogo, $t1a, $t2a); }) !== null);
+
+$idT1 = $d['times'][0]['id'];
+$idT2 = $d['times'][1]['id'];
+$timesSvc->moverParaTime($idJogo, $t1a, $idT2);
+$d = $jogos->detalhe($idJogo);
+confere('passar para o outro time: 4 x 6', $noTime($d, $t1a) === 1 && count($d['times'][0]['jogadores']) === 4 && count($d['times'][1]['jogadores']) === 6 && end($d['times'][1]['jogadores'])['id_jogador'] === $t1a);
+$timesSvc->moverParaTime($idJogo, $t1a, $idT1);
+$timesSvc->moverParaTime($idJogo, $fila0, $idT1);
+$d = $jogos->detalhe($idJogo);
+confere('colocar no time quem está na lista: sai da lista e ela se renumera', $noTime($d, $fila0) === 0 && count($d['fila']) === 1 && $d['fila'][0]['id_jogador'] === $idConvidado && $d['fila'][0]['posicao'] === 1);
+confere('não coloca no time em que ele já está', erro(function () use ($timesSvc, $idJogo, $fila0, $idT1) { $timesSvc->moverParaTime($idJogo, $fila0, $idT1); }) !== null);
+confere('não coloca em time de outro jogo', erro(function () use ($timesSvc, $idJogo, $fila0) { $timesSvc->moverParaTime($idJogo, $fila0, 999999); }) !== null);
+// sorteia de novo para os testes seguintes partirem de times recém-sorteados
+$timesSvc->sortear($idJogo);
+$d = $jogos->detalhe($idJogo);
+confere('sortear de novo desfaz os ajustes à mão', count($d['times'][0]['jogadores']) === 5 && count($d['times'][1]['jogadores']) === 5 && $d['fila'][0]['id_jogador'] === $fila0 && $d['fila'][1]['id_jogador'] === $idConvidado);
+
 // posição de cada jogador na ordem de chegada (a "lista")
 $posChegada = array_flip(array_map(function ($n) use ($idsJog) { return $idsJog[$n]; }, $ordemChegada));
 $porChegada = function (array $ids) use ($posChegada) {
@@ -298,6 +345,9 @@ confere('não sorteia de novo com partida criada', erro(function () use ($timesS
 confere('não fecha o jogo com partida em andamento', erro(function () use ($u1, $idJogo) { (new Pagamentos($u1))->finalizar($idJogo, 100); }) !== null);
 confere('não tira jogador da quadra durante a partida', erro(function () use ($u1, $idJogo, $pa) { (new Times($u1))->moverNaFila($idJogo, $pa['a']['jogadores'][0]['id_jogador'], 'fila'); }) !== null);
 confere('quem está na quadra não é movido dentro da lista', erro(function () use ($u1, $idJogo, $pa) { (new Times($u1))->moverNaFila($idJogo, $pa['a']['jogadores'][0]['id_jogador'], 'subir'); }) !== null);
+confere('não troca jogadores dos times durante a partida', erro(function () use ($u1, $idJogo, $pa) { (new Times($u1))->trocar($idJogo, $pa['a']['jogadores'][0]['id_jogador'], $pa['b']['jogadores'][0]['id_jogador']); }) !== null);
+confere('não troca quem está em quadra com a lista durante a partida', erro(function () use ($u1, $idJogo, $pa, $idConvidado) { (new Times($u1))->trocar($idJogo, $pa['a']['jogadores'][0]['id_jogador'], $idConvidado); }) !== null);
+confere('não muda ninguém de time durante a partida', erro(function () use ($u1, $idJogo, $pa, $idConvidado) { (new Times($u1))->moverParaTime($idJogo, $idConvidado, $pa['a']['id_time']); }) !== null);
 
 $a0 = $pa['a']['jogadores'][0]['id_jogador'];
 $a1 = $pa['a']['jogadores'][1]['id_jogador'];
@@ -468,6 +518,11 @@ confere('entre partidas dá para tirar alguém da quadra: vai para o fim da list
 $timesSvc->moverNaFila($idJogo, $naQuadra, 'inicio');
 $d = $jogos->detalhe($idJogo);
 confere('e trazê-lo para o começo da lista', $d['fila'][0]['id_jogador'] === $naQuadra && $d['proxima']['entra']['jogadores'][0]['id_jogador'] === $naQuadra);
+$quemFica = $d['times'][0]['jogadores'][0]['id_jogador'];
+$timesSvc->trocar($idJogo, $quemFica, $naQuadra);
+$d = $jogos->detalhe($idJogo);
+confere('entre partidas, trocar quem fica com quem entra muda os dois cartões', $d['times'][0]['jogadores'][0]['id_jogador'] === $naQuadra && $d['proxima']['entra']['jogadores'][0]['id_jogador'] === $quemFica);
+$timesSvc->trocar($idJogo, $quemFica, $naQuadra);
 
 echo "Relatório do jogo\n";
 $rel = $part->relatorioDoJogo($idJogo);
