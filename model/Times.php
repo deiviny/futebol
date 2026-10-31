@@ -255,7 +255,144 @@ class Times extends Conect
         }
     }
 
+    /**
+     * Troca dois jogadores de lugar, para o administrador arrumar os times e a lista à mão
+     * (ex.: alguém apertou um botão sem querer). Cada um fica com o lugar do outro: o time
+     * e a posição dentro dele, ou a posição na lista de espera. Com partida em andamento só
+     * dá para trocar quem está na lista; quem está em quadra espera a partida acabar.
+     */
+    public function trocar($idJogo, $idJogador, $idOutro)
+    {
+        $jogo = $this->jogoDoUsuario($idJogo);
+        $this->exigeJogoAberto($jogo);
+        $id = (int) $jogo['id'];
+        $this->exige((int) $idJogador !== (int) $idOutro, 'Escolha outro jogador para a troca.');
+
+        $this->_conexao->beginTransaction();
+        try {
+            $this->travaJogo($id);
+            $a = $this->lugarDoJogador($id, $idJogador);
+            $b = $this->lugarDoJogador($id, $idOutro);
+            $this->exige($a && $b, 'Os dois jogadores precisam estar em um time ou na lista de espera.');
+
+            if ($a['onde'] === 'time' || $b['onde'] === 'time') {
+                $this->exige(!$this->partidaAberta($id), 'Há uma partida em andamento. Encerre-a antes de mexer nos times.');
+            }
+
+            if ($a['onde'] === 'fila' && $b['onde'] === 'fila') {
+                // Cada um fica com a posição do outro (e leva consigo de que partida saiu).
+                $stmt = $this->_conexao->prepare('UPDATE jogos_fila SET ordem = ? WHERE id = ?');
+                $stmt->execute([$b['ordem'], $a['id']]);
+                $stmt->execute([$a['ordem'], $b['id']]);
+            } elseif ($a['onde'] === 'time' && $b['onde'] === 'time') {
+                $this->exige($a['id_time'] !== $b['id_time'], 'Os dois já estão no mesmo time.');
+                $stmt = $this->_conexao->prepare('UPDATE jogos_times_jogadores SET id_time = ?, ordem = ? WHERE id = ?');
+                $stmt->execute([$b['id_time'], $b['ordem'], $a['id']]);
+                $stmt->execute([$a['id_time'], $a['ordem'], $b['id']]);
+            } else {
+                // Um está no time e o outro na lista: quem estava no time assume a posição na lista.
+                $noTime = $a['onde'] === 'time' ? $a : $b;
+                $naFila = $a['onde'] === 'fila' ? $a : $b;
+
+                $stmt = $this->_conexao->prepare('UPDATE jogos_times_jogadores SET id_jogador = ?, score = ? WHERE id = ?');
+                $stmt->execute([$naFila['id_jogador'], $naFila['score'], $noTime['id']]);
+
+                $stmt = $this->_conexao->prepare('UPDATE jogos_fila SET id_jogador = ?, score = ?, id_partida_saiu = NULL WHERE id = ?');
+                $stmt->execute([$noTime['id_jogador'], $noTime['score'], $naFila['id']]);
+            }
+
+            $this->_conexao->commit();
+        } catch (\Exception $e) {
+            $this->_conexao->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Passa um jogador (da lista de espera ou do outro time) para o fim de um time em quadra,
+     * sem trocar com ninguém. Só entre uma partida e outra, e o time de onde ele sai não pode ficar vazio.
+     */
+    public function moverParaTime($idJogo, $idJogador, $idTime)
+    {
+        $jogo = $this->jogoDoUsuario($idJogo);
+        $this->exigeJogoAberto($jogo);
+        $id = (int) $jogo['id'];
+
+        $this->_conexao->beginTransaction();
+        try {
+            $this->travaJogo($id);
+            $this->exige(!$this->partidaAberta($id), 'Há uma partida em andamento. Encerre-a antes de mexer nos times.');
+
+            $stmt = $this->_conexao->prepare('SELECT id FROM jogos_times WHERE id = ? AND id_jogo = ? AND colete IS NOT NULL');
+            $stmt->execute([(int) $idTime, $id]);
+            $this->exige($stmt->fetch(), 'Time não encontrado.');
+
+            $lugar = $this->lugarDoJogador($id, $idJogador);
+            $this->exige($lugar, 'Este jogador não está em um time nem na lista de espera.');
+
+            $stmt = $this->_conexao->prepare('SELECT COALESCE(MAX(ordem), 0) + 1 FROM jogos_times_jogadores WHERE id_time = ?');
+            $stmt->execute([(int) $idTime]);
+            $ordem = (int) $stmt->fetchColumn();
+
+            if ($lugar['onde'] === 'time') {
+                $this->exige($lugar['id_time'] !== (int) $idTime, 'O jogador já está neste time.');
+
+                $stmt = $this->_conexao->prepare('SELECT COUNT(*) FROM jogos_times_jogadores WHERE id_time = ?');
+                $stmt->execute([$lugar['id_time']]);
+                $this->exige((int) $stmt->fetchColumn() > 1, 'O time não pode ficar sem jogadores. Use a troca.');
+
+                $stmt = $this->_conexao->prepare('UPDATE jogos_times_jogadores SET id_time = ?, ordem = ? WHERE id = ?');
+                $stmt->execute([(int) $idTime, $ordem, $lugar['id']]);
+            } else {
+                $stmt = $this->_conexao->prepare('DELETE FROM jogos_fila WHERE id = ?');
+                $stmt->execute([$lugar['id']]);
+
+                $stmt = $this->_conexao->prepare(
+                    'INSERT INTO jogos_times_jogadores (id_time, id_jogador, score, ordem) VALUES (?, ?, ?, ?)'
+                );
+                $stmt->execute([(int) $idTime, $lugar['id_jogador'], $lugar['score'], $ordem]);
+
+                $this->gravaOrdem($id, $this->idsDaFila($id));
+            }
+
+            $this->_conexao->commit();
+        } catch (\Exception $e) {
+            $this->_conexao->rollBack();
+            throw $e;
+        }
+    }
+
     // ------------------------------------------------------------ auxiliares
+
+    /**
+     * Onde o jogador está no jogo: em um time ou na lista de espera (null se em nenhum).
+     *
+     * @return array|null ['onde' => 'time'|'fila', 'id' => linha, 'id_time', 'id_jogador', 'ordem', 'score']
+     */
+    private function lugarDoJogador($idJogo, $idJogador)
+    {
+        $stmt = $this->_conexao->prepare(
+            'SELECT tj.id, tj.id_time, tj.id_jogador, tj.ordem, tj.score FROM jogos_times_jogadores tj
+             JOIN jogos_times t ON t.id = tj.id_time
+             WHERE t.id_jogo = ? AND tj.id_jogador = ?'
+        );
+        $stmt->execute([(int) $idJogo, (int) $idJogador]);
+        $linha = $stmt->fetch();
+        if ($linha) {
+            return ['onde' => 'time', 'id' => (int) $linha['id'], 'id_time' => (int) $linha['id_time'],
+                'id_jogador' => (int) $linha['id_jogador'], 'ordem' => (int) $linha['ordem'], 'score' => $linha['score']];
+        }
+
+        $stmt = $this->_conexao->prepare('SELECT id, id_jogador, ordem, score FROM jogos_fila WHERE id_jogo = ? AND id_jogador = ?');
+        $stmt->execute([(int) $idJogo, (int) $idJogador]);
+        $linha = $stmt->fetch();
+        if ($linha) {
+            return ['onde' => 'fila', 'id' => (int) $linha['id'], 'id_time' => null,
+                'id_jogador' => (int) $linha['id_jogador'], 'ordem' => (int) $linha['ordem'], 'score' => $linha['score']];
+        }
+
+        return null;
+    }
 
     private function travaJogo($idJogo)
     {

@@ -323,7 +323,7 @@ $(function () {
         }
         if (J.fila.length) {
             h += '<div class="sec-foot">Quem perde vai para o <b>fim</b> da lista. O próximo time sai dos <b>primeiros</b> da lista, do primeiro para o último; ' +
-                'se faltar gente, completa com quem acabou de sair. Toque em ⋯ para mudar alguém de lugar.</div>';
+                'se faltar gente, completa com quem acabou de sair. Toque em ⋯ para mudar alguém de lugar ou trocar com outro jogador.</div>';
         }
 
         if (J.diferenca !== null) {
@@ -731,7 +731,20 @@ $(function () {
         }));
     });
 
-    // ---------- mexer na lista de espera ----------
+    // ---------- mexer nos times e na lista de espera ----------
+    function opcaoMover(attrs, titulo, sub, desligado) {
+        return '<button type="button" class="row-item tappable" ' + attrs + (desligado ? ' disabled style="opacity:.35"' : '') + '>' +
+            '<div class="row-main"><div class="row-title">' + titulo + '</div>' + (sub ? '<div class="row-sub">' + sub + '</div>' : '') + '</div></button>';
+    }
+
+    function timeDoJogador(idJogador) {
+        var achou = null;
+        J.times.forEach(function (t) {
+            t.jogadores.forEach(function (p) { if (p.id_jogador === idJogador) { achou = t; } });
+        });
+        return achou;
+    }
+
     function abreMover(idJogador, nome) {
         moverJogador = idJogador;
         $('#tituloMover').text(nome.split(' ')[0]);
@@ -739,30 +752,85 @@ $(function () {
         var h = '<div class="inset-list">';
         var idx = -1;
         J.fila.forEach(function (p, i) { if (p.id_jogador === idJogador) { idx = i; } });
-
-        var opcao = function (dir, titulo, sub, desligado) {
-            return '<button type="button" class="row-item tappable" data-dir="' + dir + '"' + (desligado ? ' disabled style="opacity:.35"' : '') + '>' +
-                '<div class="row-main"><div class="row-title">' + titulo + '</div>' + (sub ? '<div class="row-sub">' + sub + '</div>' : '') + '</div></button>';
-        };
+        var meuTime = idx >= 0 ? null : timeDoJogador(idJogador);
+        var livre = !J.partida_atual; // com partida em andamento, só a lista de espera muda
 
         if (idx >= 0) {
             var ultimo = idx === J.fila.length - 1;
-            h += opcao('inicio', 'Primeiro da lista', 'entra no próximo time', idx === 0) +
-                opcao('subir', 'Subir uma posição', idx > 0 ? 'passa para ' + (idx) + 'º' : '', idx === 0) +
-                opcao('descer', 'Descer uma posição', !ultimo ? 'passa para ' + (idx + 2) + 'º' : '', ultimo) +
-                opcao('fim', 'Último da lista', '', ultimo);
-        } else if (!J.partida_atual) {
-            h += opcao('fila', 'Tirar da quadra', 'vai para o fim da lista de espera', false);
+            h += opcaoMover('data-dir="inicio"', 'Primeiro da lista', 'entra no próximo time', idx === 0) +
+                opcaoMover('data-dir="subir"', 'Subir uma posição', idx > 0 ? 'passa para ' + (idx) + 'º' : '', idx === 0) +
+                opcaoMover('data-dir="descer"', 'Descer uma posição', !ultimo ? 'passa para ' + (idx + 2) + 'º' : '', ultimo) +
+                opcaoMover('data-dir="fim"', 'Último da lista', '', ultimo);
+        } else if (livre) {
+            h += opcaoMover('data-dir="fila"', 'Tirar da quadra', 'vai para o fim da lista de espera', false);
         }
+        if (livre) {
+            J.times.forEach(function (t) {
+                if (meuTime && meuTime.id === t.id) { return; }
+                var sozinho = meuTime && meuTime.jogadores.length <= 1;
+                h += opcaoMover('data-time="' + t.id + '"', (meuTime ? 'Passar para o ' : 'Colocar no ') + esc(t.nome),
+                    'colete ' + esc(t.colete_nome) + ', fica com ' + nomeTime(t.jogadores.length + 1) + (sozinho ? ' (o time dele ficaria vazio)' : ''), sozinho);
+            });
+        }
+        h += opcaoMover('data-trocar="1"', 'Trocar de lugar com…', 'cada um fica no lugar do outro', false);
         h += '</div>';
         $('#listaMover').html(h);
         abrirFolha('#modalMover');
+    }
+
+    // Segunda tela da folha: com quem trocar (outros times e a lista de espera).
+    function listaTroca() {
+        var h = '';
+        var meuTime = timeDoJogador(moverJogador);
+        var linha = function (p, sub) {
+            return opcaoMover('data-com="' + p.id_jogador + '"', esc(p.nome), sub, false);
+        };
+
+        if (!J.partida_atual) {
+            J.times.forEach(function (t) {
+                if (meuTime && meuTime.id === t.id) { return; }
+                var itens = t.jogadores.filter(function (p) { return p.id_jogador !== moverJogador; });
+                if (!itens.length) { return; }
+                h += '<div class="sec-title">' + esc(t.nome) + ' · colete ' + esc(t.colete_nome) + '</div><div class="inset-list">';
+                itens.forEach(function (p) { h += linha(p, 'score ' + virgula(p.score.toFixed(1))); });
+                h += '</div>';
+            });
+        }
+
+        var fila = J.fila.filter(function (p) { return p.id_jogador !== moverJogador; });
+        if (fila.length && !(meuTime && J.partida_atual)) {
+            h += '<div class="sec-title">Lista de espera</div><div class="inset-list">';
+            fila.forEach(function (p) { h += linha(p, p.posicao + 'º da lista · score ' + virgula(p.score.toFixed(1))); });
+            h += '</div>';
+        }
+
+        if (!h) {
+            h = '<div class="inset-list"><div class="row-empty">Não há com quem trocar agora.</div></div>';
+        }
+        if (J.partida_atual) {
+            h += '<div class="sec-foot">Com a partida em andamento, só dá para trocar com quem está na lista de espera.</div>';
+        }
+        $('#listaMover').html(h);
     }
 
     $('#listaMover').on('click', '[data-dir]:not([disabled])', function () {
         var dir = String($(this).data('dir'));
         $('#modalMover').modal('hide');
         chama('fila_mover', { id_jogador: moverJogador, direcao: dir });
+    });
+
+    $('#listaMover').on('click', '[data-time]:not([disabled])', function () {
+        var idTime = $(this).data('time');
+        $('#modalMover').modal('hide');
+        chama('mover_para_time', { id_jogador: moverJogador, id_time: idTime }, aviso);
+    });
+
+    $('#listaMover').on('click', '[data-trocar]', listaTroca);
+
+    $('#listaMover').on('click', '[data-com]', function () {
+        var outro = $(this).data('com');
+        $('#modalMover').modal('hide');
+        chama('trocar', { id_jogador: moverJogador, id_outro: outro }, aviso);
     });
 
     // ---------- fechar jogo ----------

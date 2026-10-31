@@ -79,6 +79,16 @@ try {
             (new Times($sess))->moverNaFila($id, $idJogador, isset($_POST['direcao']) ? $_POST['direcao'] : '');
             break;
 
+        case 'trocar':
+            (new Times($sess))->trocar($id, $idJogador, isset($_POST['id_outro']) ? (int) $_POST['id_outro'] : 0);
+            $output['mensagem'] = 'Jogadores trocados';
+            break;
+
+        case 'mover_para_time':
+            (new Times($sess))->moverParaTime($id, $idJogador, isset($_POST['id_time']) ? (int) $_POST['id_time'] : 0);
+            $output['mensagem'] = 'Jogador mudou de time';
+            break;
+
         case 'partida_iniciar':
             (new Partidas($sess))->iniciar($id);
             $output['mensagem'] = 'Partida iniciada';
