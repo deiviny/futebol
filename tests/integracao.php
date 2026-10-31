@@ -348,6 +348,8 @@ confere('quem está na quadra não é movido dentro da lista', erro(function () 
 confere('não troca jogadores dos times durante a partida', erro(function () use ($u1, $idJogo, $pa) { (new Times($u1))->trocar($idJogo, $pa['a']['jogadores'][0]['id_jogador'], $pa['b']['jogadores'][0]['id_jogador']); }) !== null);
 confere('não troca quem está em quadra com a lista durante a partida', erro(function () use ($u1, $idJogo, $pa, $idConvidado) { (new Times($u1))->trocar($idJogo, $pa['a']['jogadores'][0]['id_jogador'], $idConvidado); }) !== null);
 confere('não muda ninguém de time durante a partida', erro(function () use ($u1, $idJogo, $pa, $idConvidado) { (new Times($u1))->moverParaTime($idJogo, $idConvidado, $pa['a']['id_time']); }) !== null);
+confere('não muda o por time durante a partida', erro(function () use ($u1, $idJogo) { (new Times($u1))->alterarPorTime($idJogo, 6); }) !== null);
+confere('não esvazia os times durante a partida', erro(function () use ($u1, $idJogo) { (new Times($u1))->esvaziarTimes($idJogo); }) !== null);
 
 $a0 = $pa['a']['jogadores'][0]['id_jogador'];
 $a1 = $pa['a']['jogadores'][1]['id_jogador'];
@@ -523,6 +525,40 @@ $timesSvc->trocar($idJogo, $quemFica, $naQuadra);
 $d = $jogos->detalhe($idJogo);
 confere('entre partidas, trocar quem fica com quem entra muda os dois cartões', $d['times'][0]['jogadores'][0]['id_jogador'] === $naQuadra && $d['proxima']['entra']['jogadores'][0]['id_jogador'] === $quemFica);
 $timesSvc->trocar($idJogo, $quemFica, $naQuadra);
+
+// Começou com 5 e chegou gente: passa para 6 por time entre uma partida e outra.
+$timesSvc->alterarPorTime($idJogo, 6);
+$d = $jogos->detalhe($idJogo);
+confere('mudar para 6 por time com a noite em andamento', $d['jogadores_por_time'] === 6 && count($d['proxima']['entra']['jogadores']) === min(6, count($d['fila'])));
+$idFica = $d['times'][0]['id'];
+$qtdFica = count($d['times'][0]['jogadores']);
+$primeiroDaFila = $d['fila'][0]['id_jogador'];
+$tamanho = count($d['fila']);
+$entraram = $timesSvc->completarTime($idJogo, $idFica);
+$d = $jogos->detalhe($idJogo);
+confere('completar o time com os primeiros da lista', $entraram === 6 - $qtdFica && count($d['times'][0]['jogadores']) === 6 && in_array($primeiroDaFila, array_column($d['times'][0]['jogadores'], 'id_jogador'), true) && count($d['fila']) === $tamanho - $entraram && $d['fila'][0]['posicao'] === 1);
+confere('time completo não completa de novo', erro(function () use ($timesSvc, $idJogo, $idFica) { $timesSvc->completarTime($idJogo, $idFica); }) !== null);
+confere('por time fora de 2 a 11 é recusado', erro(function () use ($timesSvc, $idJogo) { $timesSvc->alterarPorTime($idJogo, 12); }) !== null);
+confere('outro admin não muda o por time', erro(function () use ($u2, $idJogo) { (new Times($u2))->alterarPorTime($idJogo, 4); }) !== null);
+
+// Esvaziar o time e montar de novo, jogador por jogador.
+$antes = array_column($d['times'][0]['jogadores'], 'id_jogador');
+$tamanho = count($d['fila']);
+$voltaram = $timesSvc->esvaziarTimes($idJogo);
+$d = $jogos->detalhe($idJogo);
+confere('esvaziar: o time continua com o colete, vazio, e todos vão para o começo da lista', $voltaram === 6 && count($d['times']) === 1 && $d['times'][0]['id'] === $idFica && count($d['times'][0]['jogadores']) === 0 && array_slice(array_column($d['fila'], 'id_jogador'), 0, 6) === $antes && count($d['fila']) === $tamanho + 6);
+confere('com o time vazio, a próxima partida avisa', isset($d['proxima']['erro']));
+confere('esvaziar de novo é recusado', erro(function () use ($timesSvc, $idJogo) { $timesSvc->esvaziarTimes($idJogo); }) !== null);
+foreach (array_slice($antes, 0, $qtdFica) as $idJ) {
+    $timesSvc->moverParaTime($idJogo, $idJ, $idFica);
+}
+$timesSvc->alterarPorTime($idJogo, 5);
+$d = $jogos->detalhe($idJogo);
+confere('montar de novo um por um', array_column($d['times'][0]['jogadores'], 'id_jogador') === array_slice($antes, 0, $qtdFica) && !isset($d['proxima']['erro']));
+// devolve à lista o que entrou ao completar, na frente, para os testes seguintes
+foreach (array_reverse(array_slice($antes, $qtdFica)) as $idJ) {
+    $timesSvc->moverNaFila($idJogo, $idJ, 'inicio');
+}
 
 echo "Relatório do jogo\n";
 $rel = $part->relatorioDoJogo($idJogo);

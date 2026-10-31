@@ -429,9 +429,8 @@ class Jogos extends Conect
         }
         unset($time);
 
-        return array_values(array_filter($times, function ($t) {
-            return count($t['jogadores']) > 0;
-        }));
+        // Times vazios continuam aparecendo: o administrador pode tê-los esvaziado para montar de novo.
+        return $times;
     }
 
     private function foiSorteado($idJogo)
