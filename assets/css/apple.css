@@ -471,3 +471,22 @@ a.row-item:active, .row-item.tappable:active { background: var(--fill); }
 .des-lado, .des-soma { min-width: 70px; padding: 8px 8px; }
 .des-nums { gap: 6px; }
 .elenco-col .emp { display: block; width: fit-content; margin: 2px 0 0; }
+
+/* Seções que abrem e fecham (tela do jogo) */
+.sanfona { margin-top: 14px; }
+.sanfona > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    background: var(--bg-elev); border-radius: var(--r-lg); padding: 14px 16px;
+    font-size: 17px; font-weight: 600; -webkit-tap-highlight-color: transparent;
+}
+.sanfona > summary::-webkit-details-marker { display: none; }
+.sanfona > summary::after {
+    content: ''; width: 9px; height: 9px; margin-left: 4px; flex: none;
+    border-right: 2px solid var(--label-2); border-bottom: 2px solid var(--label-2);
+    transform: rotate(-45deg); transition: transform .2s;
+}
+.sanfona[open] > summary::after { transform: rotate(45deg); }
+.sanfona-titulo { flex: 1; }
+.sanfona-resumo { font-size: 15px; font-weight: 400; color: var(--label-2); }
+.sanfona-corpo { padding: 4px 0 4px; }
+.sanfona-corpo > .sec-title:first-child { margin-top: 12px; }
