@@ -99,6 +99,15 @@ try {
             $output['mensagem'] = 'Times vazios. Escolha quem vai para cada time';
             break;
 
+        case 'montar_time_entra':
+            (new Times($sess))->montarTimeQueEntra($id);
+            break;
+
+        case 'desfazer_time_entra':
+            (new Times($sess))->desfazerTimeQueEntra($id);
+            $output['mensagem'] = 'O próximo time volta a sair da lista';
+            break;
+
         case 'completar_time':
             $qtd = (new Times($sess))->completarTime($id, isset($_POST['id_time']) ? (int) $_POST['id_time'] : 0);
             $output['mensagem'] = $qtd === 1 ? '1 jogador entrou no time' : $qtd . ' jogadores entraram no time';
