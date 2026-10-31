@@ -183,6 +183,18 @@ $(function () {
         return mexe ? '<button type="button" class="btn-plain" data-act="mover" data-id="' + p.id_jogador + '" data-nome="' + esc(p.nome) + '" aria-label="Opções de ' + esc(p.nome) + '">' + ICONES.mais3 + '</button>' : '';
     }
 
+    // Time em quadra com menos jogadores que o jogo pede (ex.: passou de 5 para 6 por time).
+    function avisoIncompleto(t) {
+        if (!J.aberto || J.partida_atual || !t.id) { return ''; }
+        var falta = J.jogadores_por_time - t.jogadores.length;
+        if (falta <= 0) { return ''; }
+        return '<div class="banner aviso mt-2">' + ICONES.alerta + '<div>O ' + esc(t.nome) + ' está com ' + t.jogadores.length + ' de ' + J.jogadores_por_time + '. ' +
+            (J.fila.length
+                ? 'Complete com os primeiros da lista ou toque em ⋯ em quem deve entrar e escolha “Colocar no ' + esc(t.nome) + '”.' +
+                  '<div class="mt-2"><button type="button" class="btn-ios peq sec" data-act="completar" data-time="' + t.id + '">Completar com ' + (falta === 1 ? 'o primeiro' : 'os ' + falta + ' primeiros') + ' da lista</button></div>'
+                : 'Não há ninguém na lista de espera para completar.') + '</div></div>';
+    }
+
     function cardLado(t, papel, mexe) {
         var h = '<div><div class="tag-papel" style="padding:0 4px 6px">' + esc(papel) + '</div>' +
             '<div class="team-card" style="--team:' + esc(t.cor) + '"><div class="team-head"><span class="team-dot"></span><b>' + esc(t.nome) + '</b>' +
@@ -194,7 +206,7 @@ $(function () {
             h += '<div class="row-item"><div class="row-main"><div class="row-title">' + esc(p.nome) + tag + '</div></div>' +
                 '<div class="row-end"><span class="score">' + virgula(p.score.toFixed(1)) + '</span>' + btnMover(p, mexe) + '</div></div>';
         });
-        return h + '</div></div>';
+        return h + '</div>' + avisoIncompleto(t) + '</div>';
     }
 
     // Como o empate foi decidido, em linhas curtas (histórico) ou no cartão grande (resultado da última).
@@ -273,7 +285,7 @@ $(function () {
             h += '<div class="row-item"><div class="row-main"><div class="row-title">' + esc(p.nome) + '</div></div>' +
                 '<div class="row-end"><span class="score">' + virgula(p.score.toFixed(1)) + '</span>' + btnMover(p, mexe) + '</div></div>';
         });
-        return h + '</div>';
+        return h + '</div>' + avisoIncompleto(t);
     }
 
     function linhaFila(p, mexe) {
@@ -328,6 +340,18 @@ $(function () {
 
         if (J.diferenca !== null) {
             h += '<div class="sec-foot">Diferença de score entre os dois times: <b>' + virgula(J.diferenca) + '</b> (o sorteio por score vale só para a primeira formação).</div>';
+        }
+
+        if (J.aberto && !aoVivo) {
+            h += '<div class="inset-list mt-3"><div class="row-item"><div class="row-main"><div class="row-title">Jogadores por time</div>' +
+                '<div class="row-sub">Chegou mais gente? Vale para os próximos times que saírem da lista.</div></div>' +
+                '<div class="row-end"><button type="button" class="btn-ios peq sec" data-act="por-time" data-n="' + (J.jogadores_por_time - 1) + '"' + (J.jogadores_por_time <= 2 ? ' disabled' : '') + ' aria-label="Menos um por time">−</button>' +
+                '<b style="min-width:24px;text-align:center">' + J.jogadores_por_time + '</b>' +
+                '<button type="button" class="btn-ios peq sec" data-act="por-time" data-n="' + (J.jogadores_por_time + 1) + '"' + (J.jogadores_por_time >= 11 ? ' disabled' : '') + ' aria-label="Mais um por time">+</button></div></div></div>';
+            if (J.times.length) {
+                h += '<button type="button" class="btn-ios sec bloco mt-2" data-act="montar">Montar times à mão</button>' +
+                    '<div class="sec-foot">Esvazie os times e escolha, um por um, quem vai para cada colete.</div>';
+            }
         }
 
         h += '<div class="btn-row mt-3">' +
@@ -573,6 +597,16 @@ $(function () {
             case 'mover':
                 abreMover(id, String($b.data('nome')));
                 break;
+            case 'montar':
+                desenhaMontar();
+                abrirFolha('#modalMontar');
+                break;
+            case 'por-time':
+                chama('por_time', { jogadores_por_time: $b.data('n') }, aviso);
+                break;
+            case 'completar':
+                chama('completar_time', { id_time: $b.data('time') }, aviso);
+                break;
             case 'fechar':
                 if (J.partida_atual) {
                     alertTop('error', 'Encerre ou descarte a partida em andamento antes de fechar o jogo.');
@@ -767,9 +801,8 @@ $(function () {
         if (livre) {
             J.times.forEach(function (t) {
                 if (meuTime && meuTime.id === t.id) { return; }
-                var sozinho = meuTime && meuTime.jogadores.length <= 1;
                 h += opcaoMover('data-time="' + t.id + '"', (meuTime ? 'Passar para o ' : 'Colocar no ') + esc(t.nome),
-                    'colete ' + esc(t.colete_nome) + ', fica com ' + nomeTime(t.jogadores.length + 1) + (sozinho ? ' (o time dele ficaria vazio)' : ''), sozinho);
+                    'colete ' + esc(t.colete_nome) + ', fica com ' + nomeTime(t.jogadores.length + 1), false);
             });
         }
         h += opcaoMover('data-trocar="1"', 'Trocar de lugar com…', 'cada um fica no lugar do outro', false);
@@ -831,6 +864,85 @@ $(function () {
         var outro = $(this).data('com');
         $('#modalMover').modal('hide');
         chama('trocar', { id_jogador: moverJogador, id_outro: outro }, aviso);
+    });
+
+    // ---------- montar os times à mão ----------
+    function desenhaMontar() {
+        var times = J.times;
+        var h = '<div class="sec-foot" style="padding-top:0">Toque no colete de cada jogador. Quem não for para um time fica na lista de espera, na ordem em que está.</div>';
+
+        h += '<div class="inset-list">';
+        times.forEach(function (t) {
+            var n = t.jogadores.length;
+            h += '<div class="row-item">' + dot(t.cor) + '<div class="row-main"><div class="row-title">' + esc(t.colete_nome) + '</div></div>' +
+                '<div class="row-end"><span class="chip' + (n === J.jogadores_por_time ? ' verde' : (n > J.jogadores_por_time ? ' laranja' : '')) + '">' + n + ' de ' + J.jogadores_por_time + '</span></div></div>';
+        });
+        h += '</div>';
+
+        var botoes = function (p, ondeEsta) {
+            var b = '';
+            times.forEach(function (t) {
+                var aqui = ondeEsta === t.id;
+                b += '<button type="button" class="btn-ios peq' + (aqui ? '' : ' sec') + '"' +
+                    (aqui ? ' style="background:' + esc(t.cor) + ';border-color:' + esc(t.cor) + ';color:#fff" aria-pressed="true"' : ' aria-pressed="false"') +
+                    ' data-montar="' + p.id_jogador + '" data-para="' + t.id + '">' + esc(t.colete_nome) + '</button>';
+            });
+            b += '<button type="button" class="btn-ios peq' + (ondeEsta === 0 ? ' cinza' : ' sec') + '" aria-pressed="' + (ondeEsta === 0) + '"' +
+                ' data-montar="' + p.id_jogador + '" data-para="0">Lista</button>';
+            return '<div class="btn-row" style="gap:6px;flex-wrap:wrap;justify-content:flex-end">' + b + '</div>';
+        };
+        var linha = function (p, ondeEsta, sub) {
+            return '<div class="row-item"><div class="row-main"><div class="row-title">' + esc(p.nome) + '</div>' +
+                '<div class="row-sub">' + sub + '</div></div><div class="row-end">' + botoes(p, ondeEsta) + '</div></div>';
+        };
+
+        times.forEach(function (t) {
+            h += '<div class="sec-title">' + esc(t.nome) + ' · colete ' + esc(t.colete_nome) + '</div><div class="inset-list">';
+            if (t.jogadores.length) {
+                t.jogadores.forEach(function (p) { h += linha(p, t.id, 'score ' + virgula(p.score.toFixed(1))); });
+            } else {
+                h += '<div class="row-empty">Ninguém ainda.</div>';
+            }
+            h += '</div>';
+        });
+
+        h += '<div class="sec-title">Lista de espera</div><div class="inset-list">';
+        if (J.fila.length) {
+            J.fila.forEach(function (p) { h += linha(p, 0, p.posicao + 'º da lista'); });
+        } else {
+            h += '<div class="row-empty">Ninguém na lista.</div>';
+        }
+        h += '</div>';
+
+        var temGente = times.some(function (t) { return t.jogadores.length > 0; });
+        if (temGente) {
+            h += '<button type="button" class="btn-ios perigo bloco mt-3" data-esvaziar="1">Esvaziar os times</button>' +
+                '<div class="sec-foot">Todos os jogadores dos times voltam para o começo da lista, e você escolhe de novo.</div>';
+        }
+        $('#listaMontar').html(h);
+    }
+
+    function chamaMontar(acao, dados) {
+        chama(acao, dados, function () {
+            if (J.partida_atual) { $('#modalMontar').modal('hide'); return; }
+            desenhaMontar();
+        });
+    }
+
+    $('#listaMontar').on('click', '[data-montar][aria-pressed=false]', function () {
+        var idJogador = $(this).data('montar');
+        var para = parseInt($(this).data('para'), 10);
+        if (para) {
+            chamaMontar('mover_para_time', { id_jogador: idJogador, id_time: para });
+        } else {
+            chamaMontar('fila_mover', { id_jogador: idJogador, direcao: 'fila' });
+        }
+    });
+
+    $('#listaMontar').on('click', '[data-esvaziar]', function () {
+        confirmar('Esvaziar os times? Todos voltam para o começo da lista de espera e você monta os times de novo.', 'Esvaziar', true, function () {
+            chamaMontar('esvaziar_times', {});
+        });
     });
 
     // ---------- fechar jogo ----------

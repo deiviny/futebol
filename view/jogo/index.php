@@ -60,6 +60,20 @@ $acoesNav = '<button type="button" class="nav-btn hidden" id="btnEditarJogo">Edi
     </div>
 </div>
 
+<!-- Folha: montar os times à mão -->
+<div class="modal fade" id="modalMontar" tabindex="-1" role="dialog" aria-labelledby="tituloMontar" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="sheet-header">
+                <span class="btn-plain">&nbsp;</span>
+                <h2 id="tituloMontar">Montar times</h2>
+                <button type="button" class="btn-plain" data-dismiss="modal">Pronto</button>
+            </div>
+            <div class="sheet-body"><div id="listaMontar"></div></div>
+        </div>
+    </div>
+</div>
+
 <!-- Folha: fechar jogo / valor -->
 <div class="modal fade" id="modalFinalizar" tabindex="-1" role="dialog" aria-labelledby="tituloFinalizar" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">

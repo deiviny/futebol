@@ -89,6 +89,21 @@ try {
             $output['mensagem'] = 'Jogador mudou de time';
             break;
 
+        case 'por_time':
+            (new Times($sess))->alterarPorTime($id, isset($_POST['jogadores_por_time']) ? (int) $_POST['jogadores_por_time'] : 0);
+            $output['mensagem'] = 'Agora são ' . (int) $_POST['jogadores_por_time'] . ' por time';
+            break;
+
+        case 'esvaziar_times':
+            (new Times($sess))->esvaziarTimes($id);
+            $output['mensagem'] = 'Times vazios. Escolha quem vai para cada time';
+            break;
+
+        case 'completar_time':
+            $qtd = (new Times($sess))->completarTime($id, isset($_POST['id_time']) ? (int) $_POST['id_time'] : 0);
+            $output['mensagem'] = $qtd === 1 ? '1 jogador entrou no time' : $qtd . ' jogadores entraram no time';
+            break;
+
         case 'partida_iniciar':
             (new Partidas($sess))->iniciar($id);
             $output['mensagem'] = 'Partida iniciada';

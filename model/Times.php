@@ -310,7 +310,7 @@ class Times extends Conect
 
     /**
      * Passa um jogador (da lista de espera ou do outro time) para o fim de um time em quadra,
-     * sem trocar com ninguém. Só entre uma partida e outra, e o time de onde ele sai não pode ficar vazio.
+     * sem trocar com ninguém. Só entre uma partida e outra.
      */
     public function moverParaTime($idJogo, $idJogador, $idTime)
     {
@@ -337,10 +337,6 @@ class Times extends Conect
             if ($lugar['onde'] === 'time') {
                 $this->exige($lugar['id_time'] !== (int) $idTime, 'O jogador já está neste time.');
 
-                $stmt = $this->_conexao->prepare('SELECT COUNT(*) FROM jogos_times_jogadores WHERE id_time = ?');
-                $stmt->execute([$lugar['id_time']]);
-                $this->exige((int) $stmt->fetchColumn() > 1, 'O time não pode ficar sem jogadores. Use a troca.');
-
                 $stmt = $this->_conexao->prepare('UPDATE jogos_times_jogadores SET id_time = ?, ordem = ? WHERE id = ?');
                 $stmt->execute([(int) $idTime, $ordem, $lugar['id']]);
             } else {
@@ -360,6 +356,136 @@ class Times extends Conect
             $this->_conexao->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Muda quantos jogadores por time com a noite em andamento (ex.: começou com 5 e chegou
+     * gente para 6). Vale para os próximos times que saírem da lista; os que estão em quadra
+     * ficam como estão e o administrador completa (ou tira alguém) à mão.
+     */
+    public function alterarPorTime($idJogo, $porTime)
+    {
+        $jogo = $this->jogoDoUsuario($idJogo);
+        $this->exigeJogoAberto($jogo);
+        $porTime = (int) $porTime;
+        $this->exige($porTime >= 2 && $porTime <= 11, 'Jogadores por time: de 2 a 11.');
+        $id = (int) $jogo['id'];
+
+        $this->_conexao->beginTransaction();
+        try {
+            $this->travaJogo($id);
+            $this->exige(!$this->partidaAberta($id), 'Há uma partida em andamento. Encerre-a antes de mudar quantos jogam por time.');
+
+            $stmt = $this->_conexao->prepare('UPDATE jogos SET jogadores_por_time = ? WHERE id = ?');
+            $stmt->execute([$porTime, $id]);
+
+            $this->_conexao->commit();
+        } catch (\Exception $e) {
+            $this->_conexao->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Completa um time em quadra com os primeiros da lista de espera até ter os jogadores
+     * por time do jogo. Só entre uma partida e outra.
+     *
+     * @return int quantos entraram
+     */
+    public function completarTime($idJogo, $idTime)
+    {
+        $jogo = $this->jogoDoUsuario($idJogo);
+        $this->exigeJogoAberto($jogo);
+        $id = (int) $jogo['id'];
+
+        $this->_conexao->beginTransaction();
+        try {
+            $this->travaJogo($id);
+            $this->exige(!$this->partidaAberta($id), 'Há uma partida em andamento. Encerre-a antes de mexer nos times.');
+
+            $stmt = $this->_conexao->prepare('SELECT id FROM jogos_times WHERE id = ? AND id_jogo = ? AND colete IS NOT NULL');
+            $stmt->execute([(int) $idTime, $id]);
+            $this->exige($stmt->fetch(), 'Time não encontrado.');
+
+            $stmt = $this->_conexao->prepare('SELECT COUNT(*), COALESCE(MAX(ordem), 0) FROM jogos_times_jogadores WHERE id_time = ?');
+            $stmt->execute([(int) $idTime]);
+            list($qtd, $ordem) = array_map('intval', $stmt->fetch(\PDO::FETCH_NUM));
+
+            $faltam = (int) $jogo['jogadores_por_time'] - $qtd;
+            $this->exige($faltam > 0, 'O time já está completo.');
+
+            $stmt = $this->_conexao->prepare(
+                'SELECT id, id_jogador, score FROM jogos_fila WHERE id_jogo = ? ORDER BY ordem ASC, id ASC LIMIT ' . $faltam
+            );
+            $stmt->execute([$id]);
+            $entram = $stmt->fetchAll();
+            $this->exige($entram, 'Não há ninguém na lista de espera.');
+
+            $novo = $this->_conexao->prepare(
+                'INSERT INTO jogos_times_jogadores (id_time, id_jogador, score, ordem) VALUES (?, ?, ?, ?)'
+            );
+            $sai = $this->_conexao->prepare('DELETE FROM jogos_fila WHERE id = ?');
+            foreach ($entram as $linha) {
+                $novo->execute([(int) $idTime, (int) $linha['id_jogador'], $linha['score'], ++$ordem]);
+                $sai->execute([(int) $linha['id']]);
+            }
+            $this->gravaOrdem($id, $this->idsDaFila($id));
+
+            $this->_conexao->commit();
+        } catch (\Exception $e) {
+            $this->_conexao->rollBack();
+            throw $e;
+        }
+
+        return count($entram);
+    }
+
+    /**
+     * Esvazia os times em quadra para o administrador montá-los de novo, um jogador por vez.
+     * Os jogadores vão para o começo da lista de espera, na ordem dos times, e os times
+     * continuam existindo (vazios) com os mesmos coletes. Só entre uma partida e outra.
+     *
+     * @return int quantos jogadores voltaram para a lista
+     */
+    public function esvaziarTimes($idJogo)
+    {
+        $jogo = $this->jogoDoUsuario($idJogo);
+        $this->exigeJogoAberto($jogo);
+        $id = (int) $jogo['id'];
+
+        $this->_conexao->beginTransaction();
+        try {
+            $this->travaJogo($id);
+            $this->exige(!$this->partidaAberta($id), 'Há uma partida em andamento. Encerre-a antes de mexer nos times.');
+
+            $stmt = $this->_conexao->prepare(
+                'SELECT tj.id, tj.id_jogador, tj.score FROM jogos_times_jogadores tj
+                 JOIN jogos_times t ON t.id = tj.id_time
+                 WHERE t.id_jogo = ? AND t.colete IS NOT NULL
+                 ORDER BY t.colete ASC, tj.ordem ASC, tj.id ASC'
+            );
+            $stmt->execute([$id]);
+            $voltam = $stmt->fetchAll();
+            $this->exige($voltam, 'Os times já estão vazios.');
+
+            $stmt = $this->_conexao->prepare('UPDATE jogos_fila SET ordem = ordem + ? WHERE id_jogo = ?');
+            $stmt->execute([count($voltam), $id]);
+
+            $sai = $this->_conexao->prepare('DELETE FROM jogos_times_jogadores WHERE id = ?');
+            $entra = $this->_conexao->prepare('INSERT INTO jogos_fila (id_jogo, id_jogador, ordem, score) VALUES (?, ?, ?, ?)');
+            foreach ($voltam as $i => $linha) {
+                $sai->execute([(int) $linha['id']]);
+                $entra->execute([$id, (int) $linha['id_jogador'], $i + 1, $linha['score']]);
+            }
+            $this->gravaOrdem($id, $this->idsDaFila($id));
+
+            $this->_conexao->commit();
+        } catch (\Exception $e) {
+            $this->_conexao->rollBack();
+            throw $e;
+        }
+
+        return count($voltam);
     }
 
     // ------------------------------------------------------------ auxiliares
