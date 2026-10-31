@@ -468,6 +468,9 @@ class Times extends Conect
             $voltam = $stmt->fetchAll();
             $this->exige($voltam, 'Os times já estão vazios.');
 
+            // Entre uma partida e outra o time que entra ainda não existe: cria-se vazio, com o colete livre.
+            $this->criaTimesQueFaltam($jogo);
+
             $stmt = $this->_conexao->prepare('UPDATE jogos_fila SET ordem = ordem + ? WHERE id_jogo = ?');
             $stmt->execute([count($voltam), $id]);
 
@@ -486,6 +489,81 @@ class Times extends Conect
         }
 
         return count($voltam);
+    }
+
+    /**
+     * Entre uma partida e outra, cria vazio o time que entra (com o colete livre), para o
+     * administrador montá-lo à mão em vez de ele sair dos primeiros da lista.
+     */
+    public function montarTimeQueEntra($idJogo)
+    {
+        $jogo = $this->jogoDoUsuario($idJogo);
+        $this->exigeJogoAberto($jogo);
+        $id = (int) $jogo['id'];
+
+        $this->_conexao->beginTransaction();
+        try {
+            $this->travaJogo($id);
+            $this->exige(!$this->partidaAberta($id), 'Há uma partida em andamento. Encerre-a antes de mexer nos times.');
+            $this->exige($this->criaTimesQueFaltam($jogo) > 0, 'Os dois times já existem.');
+
+            $this->_conexao->commit();
+        } catch (\Exception $e) {
+            $this->_conexao->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Desfaz o time que entra montado à mão: os jogadores voltam para o começo da lista e o
+     * próximo time volta a sair dos primeiros da lista.
+     */
+    public function desfazerTimeQueEntra($idJogo)
+    {
+        $jogo = $this->jogoDoUsuario($idJogo);
+        $this->exigeJogoAberto($jogo);
+        $id = (int) $jogo['id'];
+
+        $this->_conexao->beginTransaction();
+        try {
+            $this->travaJogo($id);
+            $this->exige(!$this->partidaAberta($id), 'Há uma partida em andamento.');
+
+            $stmt = $this->_conexao->prepare(
+                "SELECT id_time_a, id_time_b, id_time_saiu FROM jogos_partidas
+                 WHERE id_jogo = ? AND situacao = 'finalizada' ORDER BY numero DESC, id DESC LIMIT 1"
+            );
+            $stmt->execute([$id]);
+            $ultima = $stmt->fetch();
+            $this->exige($ultima, 'Antes da primeira partida os dois times são os do sorteio.');
+            $fica = (int) $ultima['id_time_saiu'] === (int) $ultima['id_time_a'] ? (int) $ultima['id_time_b'] : (int) $ultima['id_time_a'];
+
+            $stmt = $this->_conexao->prepare('SELECT id FROM jogos_times WHERE id_jogo = ? AND colete IS NOT NULL AND id <> ?');
+            $stmt->execute([$id, $fica]);
+            $idTime = $stmt->fetchColumn();
+            $this->exige($idTime, 'Não há time montado à mão para desfazer.');
+
+            $stmt = $this->_conexao->prepare('SELECT id_jogador, score FROM jogos_times_jogadores WHERE id_time = ? ORDER BY ordem ASC, id ASC');
+            $stmt->execute([(int) $idTime]);
+            $voltam = $stmt->fetchAll();
+
+            $stmt = $this->_conexao->prepare('UPDATE jogos_fila SET ordem = ordem + ? WHERE id_jogo = ?');
+            $stmt->execute([count($voltam), $id]);
+            $novo = $this->_conexao->prepare('INSERT INTO jogos_fila (id_jogo, id_jogador, ordem, score) VALUES (?, ?, ?, ?)');
+            foreach ($voltam as $i => $linha) {
+                $novo->execute([$id, (int) $linha['id_jogador'], $i + 1, $linha['score']]);
+            }
+            $stmt = $this->_conexao->prepare('DELETE FROM jogos_times_jogadores WHERE id_time = ?');
+            $stmt->execute([(int) $idTime]);
+            $stmt = $this->_conexao->prepare('DELETE FROM jogos_times WHERE id = ? AND id_jogo = ?');
+            $stmt->execute([(int) $idTime, $id]);
+            $this->gravaOrdem($id, $this->idsDaFila($id));
+
+            $this->_conexao->commit();
+        } catch (\Exception $e) {
+            $this->_conexao->rollBack();
+            throw $e;
+        }
     }
 
     // ------------------------------------------------------------ auxiliares
@@ -518,6 +596,34 @@ class Times extends Conect
         }
 
         return null;
+    }
+
+    /** Cria vazio o time de cada colete que está sem time (só acontece entre uma partida e outra). @return int quantos criou */
+    private function criaTimesQueFaltam(array $jogo)
+    {
+        $id = (int) $jogo['id'];
+        $stmt = $this->_conexao->prepare('SELECT colete FROM jogos_times WHERE id_jogo = ? AND colete IS NOT NULL');
+        $stmt->execute([$id]);
+        $temColete = array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
+        if (!$temColete) {
+            return 0; // ainda não sorteado
+        }
+
+        $criados = 0;
+        foreach ([1, 2] as $colete) {
+            if (in_array($colete, $temColete, true)) {
+                continue;
+            }
+            $stmt = $this->_conexao->prepare('SELECT COUNT(*) FROM jogos_times WHERE id_jogo = ?');
+            $stmt->execute([$id]);
+            $nome = 'Time ' . ((int) $stmt->fetchColumn() + 1);
+
+            $stmt = $this->_conexao->prepare('INSERT INTO jogos_times (id_jogo, nome, cor, posicao, colete) VALUES (?, ?, ?, 0, ?)');
+            $stmt->execute([$id, $nome, $jogo['colete' . $colete . '_cor'], $colete]);
+            $criados++;
+        }
+
+        return $criados;
     }
 
     private function travaJogo($idJogo)

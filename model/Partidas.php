@@ -65,11 +65,13 @@ class Partidas extends Conect
             } else {
                 $entra = $plano['entra'];
                 $numeroColete = (int) $plano['colete_entra'];
-                $entrou = $this->formaTimeQueEntra($jogo, $entra, $numeroColete);
+                $entrou = empty($plano['manual'])
+                    ? $this->formaTimeQueEntra($jogo, $entra, $numeroColete)
+                    : (int) $entra['id']; // montado à mão: já existe e já veste o colete
                 $origemId = (int) $plano['saiu']['id'];
                 $origemNome = $plano['saiu']['nome'];
                 foreach ($entra['jogadores'] as $jg) {
-                    if ($jg['veio_do_saiu']) {
+                    if (!empty($jg['veio_do_saiu'])) {
                         $vieramDoSaiu[(int) $jg['id_jogador']] = true;
                     }
                 }
@@ -293,6 +295,13 @@ class Partidas extends Conect
             // O time que saiu volta para a quadra, com os mesmos jogadores, na mesma ordem e com o colete que tinha.
             $saiu = (int) $partida['id_time_saiu'];
             $ladoSaiu = $saiu === (int) $partida['id_time_a'] ? 'a' : 'b';
+
+            // Se o próximo time já tinha sido montado à mão com esse colete, ele se desfaz: os jogadores voltam para o começo da lista.
+            $stmt = $this->_conexao->prepare('SELECT id FROM jogos_times WHERE id_jogo = ? AND colete = ? AND id <> ?');
+            $stmt->execute([$id, (int) $partida['colete_' . $ladoSaiu], $saiu]);
+            foreach ($stmt->fetchAll(\PDO::FETCH_COLUMN) as $idMontado) {
+                $this->desfazTime($id, (int) $idMontado);
+            }
 
             $stmt = $this->_conexao->prepare(
                 'SELECT id_jogador, score, ordem FROM jogos_fila WHERE id_jogo = ? AND id_partida_saiu = ? ORDER BY ordem ASC, id ASC'
@@ -610,6 +619,36 @@ class Partidas extends Conect
         }
 
         $fila = $this->filaDoJogo($id);
+
+        // O administrador montou à mão o time que entra (já veste o colete livre): ele entra como está.
+        foreach ($elenco as $t) {
+            if ($t['id'] !== $ficaId && $t['colete'] === $coleteLivre) {
+                $coleteEntra = $coletes[$coleteLivre - 1];
+                $restante = [];
+                foreach ($fila as $f) {
+                    $restante[] = ['id_jogador' => (int) $f['id_jogador'], 'nome' => $f['nome']];
+                }
+                $entra = $this->resumoTime($t, $coleteEntra);
+                if (!$entra['jogadores']) {
+                    return $resultado + ['erro' => 'O ' . $t['nome'] . ' está sem jogadores. Monte o time ou esvazie os times de novo.'];
+                }
+
+                return $resultado + [
+                    'fica' => $this->resumoTime($elenco[$ficaId], $coletes[2 - $coleteLivre]),
+                    'entra' => $entra,
+                    'manual' => true,
+                    'saiu' => ['id' => $saiuId, 'nome' => $nomeSaiu, 'colete' => $coleteLivre],
+                    'colete_entra' => $coleteLivre,
+                    'de_fora' => count($entra['jogadores']),
+                    'do_saiu' => 0,
+                    'faltam' => max(0, $porTime - count($entra['jogadores'])),
+                    'por_time' => $porTime,
+                    'revanche' => false,
+                    'fila_restante' => $restante,
+                ];
+            }
+        }
+
         if (!$fila) {
             return $resultado + ['erro' => 'Não há jogadores na lista de espera para formar o próximo time.'];
         }
@@ -707,6 +746,27 @@ class Partidas extends Conect
     {
         $stmt = $this->_conexao->prepare('UPDATE jogos_times SET colete = ?, cor = ? WHERE id = ? AND id_jogo = ?');
         $stmt->execute([(int) $numero, $jogo['colete' . (int) $numero . '_cor'], (int) $idTime, (int) $jogo['id']]);
+    }
+
+    /** Desfaz um time montado à mão: os jogadores voltam para o começo da lista, na ordem do time, e o time é apagado. */
+    private function desfazTime($idJogo, $idTime)
+    {
+        $stmt = $this->_conexao->prepare('SELECT id_jogador, score FROM jogos_times_jogadores WHERE id_time = ? ORDER BY ordem ASC, id ASC');
+        $stmt->execute([(int) $idTime]);
+        $voltam = $stmt->fetchAll();
+
+        $stmt = $this->_conexao->prepare('UPDATE jogos_fila SET ordem = ordem + ? WHERE id_jogo = ?');
+        $stmt->execute([count($voltam), (int) $idJogo]);
+        $novo = $this->_conexao->prepare('INSERT INTO jogos_fila (id_jogo, id_jogador, ordem, score) VALUES (?, ?, ?, ?)');
+        foreach ($voltam as $i => $linha) {
+            $novo->execute([(int) $idJogo, (int) $linha['id_jogador'], $i + 1, $linha['score']]);
+        }
+
+        $stmt = $this->_conexao->prepare('DELETE FROM jogos_times_jogadores WHERE id_time = ?');
+        $stmt->execute([(int) $idTime]);
+        $stmt = $this->_conexao->prepare('DELETE FROM jogos_times WHERE id = ? AND id_jogo = ?');
+        $stmt->execute([(int) $idTime, (int) $idJogo]);
+        $this->renumeraFila($idJogo);
     }
 
     /** A lista de espera numerada de novo em 1, 2, 3… sem mudar a ordem. */

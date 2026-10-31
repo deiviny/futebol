@@ -546,15 +546,17 @@ $antes = array_column($d['times'][0]['jogadores'], 'id_jogador');
 $tamanho = count($d['fila']);
 $voltaram = $timesSvc->esvaziarTimes($idJogo);
 $d = $jogos->detalhe($idJogo);
-confere('esvaziar: o time continua com o colete, vazio, e todos vão para o começo da lista', $voltaram === 6 && count($d['times']) === 1 && $d['times'][0]['id'] === $idFica && count($d['times'][0]['jogadores']) === 0 && array_slice(array_column($d['fila'], 'id_jogador'), 0, 6) === $antes && count($d['fila']) === $tamanho + 6);
+confere('esvaziar: o time continua com o colete, vazio, e todos vão para o começo da lista', $voltaram === 6 && count($d['times']) === 2 && in_array($idFica, array_column($d['times'], 'id'), true) && count($d['times'][0]['jogadores']) + count($d['times'][1]['jogadores']) === 0 && count($d['times'][0]['jogadores']) === 0 && array_slice(array_column($d['fila'], 'id_jogador'), 0, 6) === $antes && count($d['fila']) === $tamanho + 6);
 confere('com o time vazio, a próxima partida avisa', isset($d['proxima']['erro']));
 confere('esvaziar de novo é recusado', erro(function () use ($timesSvc, $idJogo) { $timesSvc->esvaziarTimes($idJogo); }) !== null);
 foreach (array_slice($antes, 0, $qtdFica) as $idJ) {
     $timesSvc->moverParaTime($idJogo, $idJ, $idFica);
 }
 $timesSvc->alterarPorTime($idJogo, 5);
+$timesSvc->desfazerTimeQueEntra($idJogo); // o próximo time volta a sair da lista
+confere('sem time montado, não há o que desfazer', erro(function () use ($timesSvc, $idJogo) { $timesSvc->desfazerTimeQueEntra($idJogo); }) !== null);
 $d = $jogos->detalhe($idJogo);
-confere('montar de novo um por um', array_column($d['times'][0]['jogadores'], 'id_jogador') === array_slice($antes, 0, $qtdFica) && !isset($d['proxima']['erro']));
+confere('montar de novo um por um', count($d['times']) === 1 && array_column($d['times'][0]['jogadores'], 'id_jogador') === array_slice($antes, 0, $qtdFica) && !isset($d['proxima']['erro']) && empty($d['proxima']['manual']));
 // devolve à lista o que entrou ao completar, na frente, para os testes seguintes
 foreach (array_reverse(array_slice($antes, $qtdFica)) as $idJ) {
     $timesSvc->moverNaFila($idJogo, $idJ, 'inicio');
@@ -683,6 +685,41 @@ $d3 = $jogos->detalhe($idQuatro);
 confere('13 chegaram, 3 por time: no máximo 4 times (2 em quadra, 6 na lista) e 1 sobra no fim', count($d3['times']) === 2 && count($d3['fila']) === 7 && $d3['fila'][6]['id_jogador'] === $idsQuatro[12]);
 $emQuadra = array_merge(array_column($d3['times'][0]['jogadores'], 'id_jogador'), array_column($d3['times'][1]['jogadores'], 'id_jogador'));
 confere('ninguém repetido entre quadra e lista', count(array_unique(array_merge($emQuadra, array_column($d3['fila'], 'id_jogador')))) === 13);
+
+echo "Montar os dois times à mão entre uma partida e outra\n";
+$part3 = new Partidas($u1);
+$times3 = new Times($u1);
+$pq1 = $part3->iniciar($idQuatro);
+$part3->gol($idQuatro, $pq1, $d3['times'][0]['jogadores'][0]['id_jogador'], '');
+$part3->encerrar($idQuatro, $pq1);
+$d3 = $jogos->detalhe($idQuatro);
+confere('depois da partida só o time que ficou tem colete', count($d3['times']) === 1 && empty($d3['proxima']['manual']));
+$idFica3 = $d3['times'][0]['id'];
+$times3->esvaziarTimes($idQuatro);
+$d3 = $jogos->detalhe($idQuatro);
+$coletes3 = array_column($d3['times'], 'colete');
+sort($coletes3);
+confere('esvaziar entre partidas cria vazio o time que entra, com o colete livre', count($d3['times']) === 2 && $coletes3 === [1, 2] && count($d3['fila']) === 13 && isset($d3['proxima']['erro']));
+$idEntra3 = $d3['times'][0]['id'] === $idFica3 ? $d3['times'][1]['id'] : $d3['times'][0]['id'];
+confere('não cria o time que entra duas vezes', erro(function () use ($times3, $idQuatro) { $times3->montarTimeQueEntra($idQuatro); }) !== null);
+$ordem3 = array_column($d3['fila'], 'id_jogador');
+foreach ([0, 2, 4] as $i) { $times3->moverParaTime($idQuatro, $ordem3[$i], $idFica3); }
+foreach ([1, 3, 5] as $i) { $times3->moverParaTime($idQuatro, $ordem3[$i], $idEntra3); }
+$d3 = $jogos->detalhe($idQuatro);
+confere('próxima partida usa o time montado à mão', $d3['proxima']['manual'] === true && $d3['proxima']['entra']['id'] === $idEntra3 && array_column($d3['proxima']['entra']['jogadores'], 'id_jogador') === [$ordem3[1], $ordem3[3], $ordem3[5]] && count($d3['fila']) === 7);
+$pq2 = $part3->iniciar($idQuatro);
+$d3 = $jogos->detalhe($idQuatro);
+confere('a partida começa com os dois times montados e a lista fica igual', $d3['partida_atual']['numero'] === 2 && count($d3['fila']) === 7 && count($d3['partida_atual']['a']['jogadores']) === 3 && count($d3['partida_atual']['b']['jogadores']) === 3);
+$part3->descartar($idQuatro, $pq2);
+$d3 = $jogos->detalhe($idQuatro);
+confere('descartar desfaz o time montado: os jogadores voltam para o começo da lista', count($d3['times']) === 1 && count($d3['fila']) === 10 && array_slice(array_column($d3['fila'], 'id_jogador'), 0, 3) === [$ordem3[1], $ordem3[3], $ordem3[5]]);
+$times3->montarTimeQueEntra($idQuatro);
+$d3 = $jogos->detalhe($idQuatro);
+$idEntra3 = $d3['times'][0]['id'] === $idFica3 ? $d3['times'][1]['id'] : $d3['times'][0]['id'];
+$times3->moverParaTime($idQuatro, $d3['fila'][0]['id_jogador'], $idEntra3);
+$part3->reabrir($idQuatro, $pq1);
+$d3 = $jogos->detalhe($idQuatro);
+confere('reabrir a partida desfaz o time montado e devolve o colete a quem saiu', $d3['partida_atual']['numero'] === 1 && count($d3['times']) === 2 && !in_array($idEntra3, array_column($d3['times'], 'id'), true) && count($d3['fila']) === 7);
 
 echo "Jogador com histórico\n";
 confere('remover jogador com histórico só inativa', $j1->remover($idGrupo, $idsJog['Ana']) === 'inativado');

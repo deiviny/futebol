@@ -261,7 +261,12 @@ $(function () {
         }
 
         h += '<div class="versus">' + cardLado(X.fica, 'Fica na quadra', mexe) +
-            cardLado(X.entra, X.revanche ? 'Revanche: entra de novo' : 'Entra com o colete de quem saiu', mexe) + '</div>';
+            cardLado(X.entra, X.manual ? 'Entra (montado à mão)' : (X.revanche ? 'Revanche: entra de novo' : 'Entra com o colete de quem saiu'), mexe) + '</div>';
+
+        if (X.manual) {
+            return h + '<div class="sec-foot" style="padding-top:0">O time que entra foi montado à mão; a lista de espera continua igual para as próximas partidas. Para mudar, use “Montar times à mão”.</div>' +
+                '<button type="button" class="btn-ios verde bloco mt-3" data-act="iniciar">Iniciar partida</button>';
+        }
 
         var partes = [];
         if (X.de_fora) { partes.push('<b>' + X.de_fora + '</b> de fora, na ordem da lista'); }
@@ -318,7 +323,7 @@ $(function () {
 
         // Entre uma partida e outra os primeiros da lista já aparecem no cartão "Entra"; aqui fica o resto.
         var X = J.proxima;
-        var pulo = (X && !X.primeira && !X.erro) ? X.entra.jogadores.length : 0;
+        var pulo = (X && !X.primeira && !X.erro && !X.manual) ? X.entra.jogadores.length : 0;
         var lista = J.fila.slice(pulo);
 
         if (J.fila.length || antes) {
@@ -914,6 +919,16 @@ $(function () {
         }
         h += '</div>';
 
+        if (times.length < 2 && !J.partida_atual) {
+            h += '<button type="button" class="btn-ios sec bloco mt-3" data-montar-entra="1">Montar também o time que entra</button>' +
+                '<div class="sec-foot">Hoje o próximo time sai dos primeiros da lista. Com isso ele fica vazio, com o colete livre, e você escolhe quem entra.</div>';
+        }
+
+        if (times.length === 2 && J.tem_partidas && !J.partida_atual) {
+            h += '<button type="button" class="btn-ios sec bloco mt-3" data-desfazer-entra="1">Próximo time volta a sair da lista</button>' +
+                '<div class="sec-foot">Desfaz o time montado à mão: quem estava nele volta para o começo da lista.</div>';
+        }
+
         var temGente = times.some(function (t) { return t.jogadores.length > 0; });
         if (temGente) {
             h += '<button type="button" class="btn-ios perigo bloco mt-3" data-esvaziar="1">Esvaziar os times</button>' +
@@ -937,6 +952,14 @@ $(function () {
         } else {
             chamaMontar('fila_mover', { id_jogador: idJogador, direcao: 'fila' });
         }
+    });
+
+    $('#listaMontar').on('click', '[data-montar-entra]', function () {
+        chamaMontar('montar_time_entra', {});
+    });
+
+    $('#listaMontar').on('click', '[data-desfazer-entra]', function () {
+        chamaMontar('desfazer_time_entra', {});
     });
 
     $('#listaMontar').on('click', '[data-esvaziar]', function () {
