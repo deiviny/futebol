@@ -6,6 +6,8 @@ $(function () {
     var T0 = 0;          // instante (ms) em que a partida começou, no relógio do navegador
     var golLado = 'a';   // lado que vai ganhar o gol aberto na folha
     var moverJogador = 0;
+    var SANFONAS = {};   // seções abertas/fechadas: {chave: true|false}
+    try { SANFONAS = JSON.parse(localStorage.getItem('jogo_sanfonas') || '{}') || {}; } catch (e) { SANFONAS = {}; }
     var modoDesempate = 'par_impar'; // como decidir o empate na folha de encerrar
 
     // ---------- chamadas ----------
@@ -99,7 +101,17 @@ $(function () {
     // vem a chegada e nos dias anteriores o link de confirmação.
     function blocoAberto() {
         if (J.sorteado) {
-            return partPartida() + partTimes() + partHistorico() + partListas() + partLink();
+            // Durante o jogo a partida fica sempre à vista; o resto abre e fecha com um toque.
+            var antes = !J.tem_partidas && !J.partida_atual;
+            var esperando = J.fila.length;
+            return partPartida() +
+                sanfona('times', antes ? 'Times e lista de espera' : 'Lista de espera',
+                    esperando ? esperando + (esperando === 1 ? ' esperando' : ' esperando') : 'ninguém esperando', partTimes(), true) +
+                (J.aberto && !J.partida_atual ? sanfona('ajustes', 'Ajustar times', J.jogadores_por_time + ' por time', partAjustes(), false) : '') +
+                (J.historico.length ? sanfona('historico', 'Histórico da noite', J.historico.length + (J.historico.length === 1 ? ' partida' : ' partidas'), partHistorico(), false) : '') +
+                sanfona('chegada', 'Chegada e confirmados', J.chegaram + ' chegaram', partListas(), false) +
+                sanfona('link', 'Link de confirmação', '', partLink(), false) +
+                partFechar();
         }
         var noDia = J.data <= hojeLocal();
         return noDia
@@ -305,7 +317,7 @@ $(function () {
         var aoVivo = !!J.partida_atual;
         var antes = !J.tem_partidas && !aoVivo;
         var mexe = J.aberto;
-        var h = '<div class="sec-head-lg">' + (antes ? 'Times e lista de espera' : 'Lista de espera') + '</div>';
+        var h = '';
 
         if (J.sem_time.length) {
             h += '<div class="sec-title">Chegaram depois do sorteio</div><div class="inset-list">';
@@ -326,8 +338,11 @@ $(function () {
         var pulo = (X && !X.primeira && !X.erro && !X.manual) ? X.entra.jogadores.length : 0;
         var lista = J.fila.slice(pulo);
 
-        if (J.fila.length || antes) {
+        // Dentro da seção "Lista de espera" o título só aparece quando há algo antes (cartões dos times) ou quando é o resto da lista.
+        if (pulo || (antes && J.times.length)) {
             h += '<div class="sec-title">' + (pulo ? 'Depois deles na lista' : 'Lista de espera') + '</div>';
+        } else if (lista.length || antes) {
+            h += '<div style="height:10px"></div>';
         }
         if (lista.length) {
             h += '<div class="inset-list">';
@@ -347,25 +362,39 @@ $(function () {
             h += '<div class="sec-foot">Diferença de score entre os dois times: <b>' + virgula(J.diferenca) + '</b> (o sorteio por score vale só para a primeira formação).</div>';
         }
 
-        if (J.aberto && !aoVivo) {
-            h += '<div class="inset-list mt-3"><div class="row-item"><div class="row-main"><div class="row-title">Jogadores por time</div>' +
-                '<div class="row-sub">Chegou mais gente? Vale para os próximos times que saírem da lista.</div></div>' +
-                '<div class="row-end"><button type="button" class="btn-ios peq sec" data-act="por-time" data-n="' + (J.jogadores_por_time - 1) + '"' + (J.jogadores_por_time <= 2 ? ' disabled' : '') + ' aria-label="Menos um por time">−</button>' +
-                '<b style="min-width:24px;text-align:center">' + J.jogadores_por_time + '</b>' +
-                '<button type="button" class="btn-ios peq sec" data-act="por-time" data-n="' + (J.jogadores_por_time + 1) + '"' + (J.jogadores_por_time >= 11 ? ' disabled' : '') + ' aria-label="Mais um por time">+</button></div></div></div>';
-            if (J.times.length) {
-                h += '<button type="button" class="btn-ios sec bloco mt-2" data-act="montar">Montar times à mão</button>' +
-                    '<div class="sec-foot">Esvazie os times e escolha, um por um, quem vai para cada colete.</div>';
-            }
-        }
+        return h;
+    }
 
-        h += '<div class="btn-row mt-3">' +
-            (!J.tem_partidas ? '<button type="button" class="btn-ios cinza" data-act="sortear">Sortear novamente</button>' : '') +
-            '<button type="button" class="btn-ios" data-act="fechar">Fechar jogo e cobrar</button></div>';
-        if (J.tem_partidas) {
+    // Jogadores por time, montar à mão e sortear de novo (entre uma partida e outra).
+    function partAjustes() {
+        var h = '<div class="inset-list"><div class="row-item"><div class="row-main"><div class="row-title">Jogadores por time</div>' +
+            '<div class="row-sub wrap">Chegou mais gente? Vale para os próximos times que saírem da lista.</div></div>' +
+            '<div class="row-end"><button type="button" class="btn-ios peq sec" data-act="por-time" data-n="' + (J.jogadores_por_time - 1) + '"' + (J.jogadores_por_time <= 2 ? ' disabled' : '') + ' aria-label="Menos um por time">−</button>' +
+            '<b style="min-width:24px;text-align:center">' + J.jogadores_por_time + '</b>' +
+            '<button type="button" class="btn-ios peq sec" data-act="por-time" data-n="' + (J.jogadores_por_time + 1) + '"' + (J.jogadores_por_time >= 11 ? ' disabled' : '') + ' aria-label="Mais um por time">+</button></div></div></div>';
+        if (J.times.length) {
+            h += '<button type="button" class="btn-ios sec bloco mt-2" data-act="montar">Montar times à mão</button>' +
+                '<div class="sec-foot">Esvazie os times e escolha, um por um, quem vai para cada colete.</div>';
+        }
+        if (!J.tem_partidas) {
+            h += '<button type="button" class="btn-ios cinza bloco mt-2" data-act="sortear">Sortear novamente</button>';
+        } else {
             h += '<div class="sec-foot">Para sortear de novo, descarte as partidas.</div>';
         }
         return h;
+    }
+
+    function partFechar() {
+        return '<button type="button" class="btn-ios bloco mt-4" data-act="fechar">Fechar jogo e cobrar</button>';
+    }
+
+    // Seção que abre e fecha. O estado fica guardado (a tela é redesenhada a cada ação).
+    function sanfona(chave, titulo, resumo, conteudo, abertoPadrao) {
+        var aberto = SANFONAS.hasOwnProperty(chave) ? SANFONAS[chave] : abertoPadrao;
+        return '<details class="sanfona" data-sanfona="' + chave + '"' + (aberto ? ' open' : '') + '>' +
+            '<summary><span class="sanfona-titulo">' + esc(titulo) + '</span>' +
+            (resumo ? '<span class="sanfona-resumo">' + esc(resumo) + '</span>' : '') + '</summary>' +
+            '<div class="sanfona-corpo">' + conteudo + '</div></details>';
     }
 
     // ----- histórico da noite -----
@@ -406,7 +435,7 @@ $(function () {
 
     function partHistorico() {
         if (!J.historico.length) { return ''; }
-        var h = '<div class="sec-head-lg">Histórico da noite</div>' + btnRelatorio();
+        var h = btnRelatorio();
 
         if (J.artilheiros.length) {
             h += '<div class="sec-title">Artilheiros</div><div class="inset-list">';
@@ -426,7 +455,7 @@ $(function () {
     // ----- chegada e confirmações -----
     function partLink() {
         var h = '';
-        h += '<div class="sec-head-lg">Confirmação</div>' +
+        h += (J.sorteado ? '' : '<div class="sec-head-lg">Confirmação</div>') +
             '<div class="card-ios"><h3>Link para o grupo do WhatsApp</h3><p class="mb-2">Cada jogador abre, informa o WhatsApp e confirma.</p>' +
             '<div class="link-box"><span style="flex:1">' + esc(J.link_publico) + '</span></div>' +
             '<div class="btn-row mt-3"><button class="btn-ios sec" data-act="copiar-link">Copiar link</button>' +
@@ -640,6 +669,14 @@ $(function () {
         }
         e.stopPropagation();
     });
+
+    // "toggle" não sobe pelo DOM: escuta na fase de captura.
+    document.getElementById('jogoConteudo').addEventListener('toggle', function (e) {
+        var el = e.target;
+        if (!el.classList || !el.classList.contains('sanfona')) { return; }
+        SANFONAS[el.getAttribute('data-sanfona')] = el.open;
+        try { localStorage.setItem('jogo_sanfonas', JSON.stringify(SANFONAS)); } catch (err) { /* sem armazenamento: só nesta visita */ }
+    }, true);
 
     $('#jogoConteudo').on('change', 'input[data-act=pago]', function () {
         chama('pagar', { id_jogador: $(this).data('id'), pago: this.checked ? 1 : 0 });
