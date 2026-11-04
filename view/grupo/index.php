@@ -184,10 +184,12 @@ $voltarTexto = 'Grupos';
 
                 <div class="sec-title">Nível (só você vê)</div>
                 <div class="inset-list">
-                    <div class="field-row"><label for="pScore" style="flex-basis:60px">Score</label>
-                        <input id="pScore" name="score" type="range" min="0" max="10" step="0.5" value="5"><span class="range-valor" id="pScoreValor">5,0</span></div>
+                    <div class="field-row"><label for="pDefesa" style="flex-basis:60px">Defesa</label>
+                        <input id="pDefesa" name="defesa" type="range" min="0" max="10" step="0.5" value="5"><span class="range-valor" id="pDefesaValor">5,0</span></div>
+                    <div class="field-row"><label for="pAtaque" style="flex-basis:60px">Ataque</label>
+                        <input id="pAtaque" name="ataque" type="range" min="0" max="10" step="0.5" value="5"><span class="range-valor" id="pAtaqueValor">5,0</span></div>
                 </div>
-                <div class="field-note">O score equilibra os times no sorteio. Pode mudar quando quiser.</div>
+                <div class="field-note">O sorteio equilibra a defesa e o ataque dos times. Pode mudar quando quiser.</div>
 
                 <div class="inset-list mt-3" id="blocoAtivo">
                     <div class="field-row"><label for="pAtivo" class="flex-fill">Ativo no grupo</label>

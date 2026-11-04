@@ -49,7 +49,8 @@ class Times extends Conect
         );
 
         $stmt = $this->_conexao->prepare(
-            "SELECT p.id_jogador, COALESCE(gj.score, 5.0) AS score
+            "SELECT p.id_jogador, COALESCE(gj.score, 5.0) AS score,
+                    COALESCE(gj.defesa, 5.0) AS defesa, COALESCE(gj.ataque, 5.0) AS ataque
              FROM jogos_presencas p
              LEFT JOIN grupos_jogadores gj ON gj.id_grupo = ? AND gj.id_jogador = p.id_jogador
              WHERE p.id_jogo = ? AND p.resposta = 'confirmado' AND p.chegada_em IS NOT NULL
@@ -57,9 +58,11 @@ class Times extends Conect
         );
         $stmt->execute([(int) $jogo['id_grupo'], (int) $jogo['id']]);
 
-        $scores = []; // [idJogador => score] na ordem de chegada
+        $scores = []; // [idJogador => score] na ordem de chegada (média, guardada no time)
+        $niveis = []; // [idJogador => [defesa, ataque]] para equilibrar o sorteio
         foreach ($stmt->fetchAll() as $linha) {
             $scores[(int) $linha['id_jogador']] = (float) $linha['score'];
+            $niveis[(int) $linha['id_jogador']] = [(float) $linha['defesa'], (float) $linha['ataque']];
         }
 
         $this->exige(count($scores) >= 2, 'Marque a chegada de pelo menos 2 jogadores para sortear.');
@@ -70,11 +73,11 @@ class Times extends Conect
         $posicao = array_flip($ids); // idJogador => posição na ordem de chegada (0, 1, 2…)
         $qtdTimes = max(2, min(self::MAX_TIMES_SORTEIO, intdiv(count($ids), max(1, $porTime))));
 
-        // Primeira formação: os primeiros a chegar, em times equilibrados pelo score.
+        // Primeira formação: os primeiros a chegar, em times equilibrados na defesa e no ataque.
         $primeiros = array_slice($ids, 0, $porTime * $qtdTimes);
         $parcial = [];
         foreach ($primeiros as $id) {
-            $parcial[$id] = $scores[$id];
+            $parcial[$id] = $niveis[$id];
         }
         $times = (new Sorteio())->balancear($parcial, $qtdTimes, $semente);
 

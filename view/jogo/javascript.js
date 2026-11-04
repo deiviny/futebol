@@ -122,7 +122,7 @@ $(function () {
     function partSorteio() {
         var h = '<div class="sec-head-lg">Sorteio</div>' +
             '<div class="card-ios"><h3>Sorteio dos times</h3><p>Marque “Chegou” para cada jogador na ordem em que chegam. ' +
-            'Os primeiros ' + (J.jogadores_por_time * 2) + ' formam os dois primeiros times, equilibrados pelo score (o sorteio por score vale só para essa primeira formação). ' +
+            'Os primeiros ' + (J.jogadores_por_time * 2) + ' formam os dois primeiros times, equilibrados na defesa e no ataque (o sorteio vale só para essa primeira formação). ' +
             'Se chegar gente para 3 ou 4 times completos (até ' + (J.jogadores_por_time * 4) + '), o sorteio já equilibra todos: os dois que chegaram antes entram em quadra e os outros esperam inteiros na lista. ' +
             'Cada time veste um dos coletes do grupo (' + esc(J.coletes[0].nome) + ' e ' + esc(J.coletes[1].nome) + '). ' +
             'Quem chegou depois entra na lista de espera, na ordem de chegada, e a lista manda nas próximas partidas.</p></div>' +
@@ -152,7 +152,7 @@ $(function () {
     function ladoPreview(L) {
         return '<div class="placar-lado" style="--team:' + esc(L.cor) + '">' +
             '<div class="placar-colete"><span class="team-dot"></span><span>' + esc(L.colete_nome) + '</span></div>' +
-            '<div class="placar-time">' + esc(L.nome) + ' · soma ' + virgula(L.soma) + '</div></div>';
+            '<div class="placar-time">' + esc(L.nome) + '</div></div>';
     }
 
     function elencoCol(L) {
@@ -211,12 +211,12 @@ $(function () {
         var h = '<div><div class="tag-papel" style="padding:0 4px 6px">' + esc(papel) + '</div>' +
             '<div class="team-card" style="--team:' + esc(t.cor) + '"><div class="team-head"><span class="team-dot"></span><b>' + esc(t.nome) + '</b>' +
             (t.colete_nome ? '<span class="chip">Colete ' + esc(t.colete_nome) + '</span>' : '') +
-            '<span class="chip">Soma ' + virgula(t.soma) + '</span></div>';
+            '</div>';
         t.jogadores.forEach(function (p) {
             var tag = p.veio_do_saiu ? '<span class="emp" title="Estava no ' + esc(p.origem || '') + '">veio do ' + esc(p.origem || 'time que saiu') + '</span>'
                 : (p.veio_do_saiu === false ? '<span class="emp cinza">de fora</span>' : '');
             h += '<div class="row-item"><div class="row-main"><div class="row-title">' + esc(p.nome) + tag + '</div></div>' +
-                '<div class="row-end"><span class="score">' + virgula(p.score.toFixed(1)) + '</span>' + btnMover(p, mexe) + '</div></div>';
+                '<div class="row-end">' + btnMover(p, mexe) + '</div></div>';
         });
         return h + '</div>' + avisoIncompleto(t) + '</div>';
     }
@@ -297,10 +297,10 @@ $(function () {
         var mexe = J.aberto && !J.partida_atual;
 
         var h = '<div class="team-card" style="--team:' + esc(t.cor) + '"><div class="team-head"><span class="team-dot"></span><b>' + esc(t.nome) + '</b>' +
-            '<span class="chip">Colete ' + esc(t.colete_nome) + '</span><span class="chip">Soma ' + virgula(t.soma) + '</span></div>';
+            '<span class="chip">Colete ' + esc(t.colete_nome) + '</span></div>';
         t.jogadores.forEach(function (p) {
             h += '<div class="row-item"><div class="row-main"><div class="row-title">' + esc(p.nome) + '</div></div>' +
-                '<div class="row-end"><span class="score">' + virgula(p.score.toFixed(1)) + '</span>' + btnMover(p, mexe) + '</div></div>';
+                '<div class="row-end">' + btnMover(p, mexe) + '</div></div>';
         });
         return h + '</div>' + avisoIncompleto(t);
     }
@@ -310,7 +310,7 @@ $(function () {
             '<div class="num-chegada fila-pos">' + p.posicao + '</div>' +
             '<div class="row-main"><div class="row-title">' + esc(p.nome) + '</div>' +
             (p.saiu_partida ? '<div class="row-sub">Saiu na partida ' + p.saiu_partida + '</div>' : '') + '</div>' +
-            '<div class="row-end"><span class="score">' + virgula(p.score.toFixed(1)) + '</span>' + btnMover(p, mexe) + '</div></div>';
+            '<div class="row-end">' + btnMover(p, mexe) + '</div></div>';
     }
 
     function partTimes() {
@@ -323,7 +323,7 @@ $(function () {
             h += '<div class="sec-title">Chegaram depois do sorteio</div><div class="inset-list">';
             J.sem_time.forEach(function (p) {
                 h += '<div class="row-item"><div class="row-main"><div class="row-title">' + esc(p.nome) + '</div></div>' +
-                    '<div class="row-end"><span class="score">' + virgula(p.score.toFixed(1)) + '</span>' +
+                    '<div class="row-end">' +
                     '<button type="button" class="btn-ios peq sec" data-act="time-add" data-id="' + p.id_jogador + '">Entrar na lista</button></div></div>';
             });
             h += '</div><div class="sec-foot">Entram no fim da lista de espera. Quem não entrar na lista nem em um time não é cobrado.</div>';
@@ -358,9 +358,6 @@ $(function () {
                 'se faltar gente, completa com quem acabou de sair. Toque em ⋯ para mudar alguém de lugar ou trocar com outro jogador.</div>';
         }
 
-        if (J.diferenca !== null) {
-            h += '<div class="sec-foot">Diferença de score entre os dois times: <b>' + virgula(J.diferenca) + '</b> (o sorteio por score vale só para a primeira formação).</div>';
-        }
 
         return h;
     }
@@ -493,7 +490,7 @@ $(function () {
                 h += '<div class="row-item">' +
                     '<div class="num-chegada' + (p.chegou ? '' : ' vazio') + '">' + (p.chegou ? p.ordem_chegada : '–') + '</div>' +
                     '<div class="row-main"><div class="row-title">' + esc(p.nome) + '</div></div>' +
-                    '<div class="row-end"><span class="score">' + virgula(p.score.toFixed(1)) + '</span>' +
+                    '<div class="row-end">' +
                     '<button class="btn-ios peq ' + (p.chegou ? 'verde' : 'sec') + '" data-act="chegada" data-id="' + p.id_jogador + '" data-chegou="' + (p.chegou ? 0 : 1) + '" aria-pressed="' + p.chegou + '">' +
                     (p.chegou ? 'Chegou ✓' : 'Chegou') + '</button>' +
                     (J.situacao === 'agendado' ? '<button class="btn-plain perigo" data-act="remover" data-id="' + p.id_jogador + '" aria-label="Tirar ' + esc(p.nome) + ' da lista">' + ICONES.x + '</button>' : '') +
@@ -867,7 +864,7 @@ $(function () {
                 var itens = t.jogadores.filter(function (p) { return p.id_jogador !== moverJogador; });
                 if (!itens.length) { return; }
                 h += '<div class="sec-title">' + esc(t.nome) + ' · colete ' + esc(t.colete_nome) + '</div><div class="inset-list">';
-                itens.forEach(function (p) { h += linha(p, 'score ' + virgula(p.score.toFixed(1))); });
+                itens.forEach(function (p) { h += linha(p, ''); });
                 h += '</div>';
             });
         }
@@ -875,7 +872,7 @@ $(function () {
         var fila = J.fila.filter(function (p) { return p.id_jogador !== moverJogador; });
         if (fila.length && !(meuTime && J.partida_atual)) {
             h += '<div class="sec-title">Lista de espera</div><div class="inset-list">';
-            fila.forEach(function (p) { h += linha(p, p.posicao + 'º da lista · score ' + virgula(p.score.toFixed(1))); });
+            fila.forEach(function (p) { h += linha(p, p.posicao + 'º da lista'); });
             h += '</div>';
         }
 
@@ -935,13 +932,13 @@ $(function () {
         };
         var linha = function (p, ondeEsta, sub) {
             return '<div class="row-item"><div class="row-main"><div class="row-title">' + esc(p.nome) + '</div>' +
-                '<div class="row-sub">' + sub + '</div></div><div class="row-end">' + botoes(p, ondeEsta) + '</div></div>';
+                (sub ? '<div class="row-sub">' + sub + '</div>' : '') + '</div><div class="row-end">' + botoes(p, ondeEsta) + '</div></div>';
         };
 
         times.forEach(function (t) {
             h += '<div class="sec-title">' + esc(t.nome) + ' · colete ' + esc(t.colete_nome) + '</div><div class="inset-list">';
             if (t.jogadores.length) {
-                t.jogadores.forEach(function (p) { h += linha(p, t.id, 'score ' + virgula(p.score.toFixed(1))); });
+                t.jogadores.forEach(function (p) { h += linha(p, t.id, ''); });
             } else {
                 h += '<div class="row-empty">Ninguém ainda.</div>';
             }
