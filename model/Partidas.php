@@ -128,21 +128,62 @@ class Partidas extends Conect
     }
 
     /**
-     * Marca um gol. Com $idJogador: gol dele (ou gol contra, que vale para o adversário).
-     * Sem jogador: "não sei quem fez", e $lado diz para quem vale.
+     * Marca um gol (tela do administrador). Com $idJogador: gol dele (ou gol contra, que vale
+     * para o adversário). Sem jogador: "não sei quem fez", e $lado diz para quem vale.
+     * $idAssistencia: quem deu o passe (só em gol a favor, do mesmo time de quem fez).
      */
-    public function gol($idJogo, $idPartida, $idJogador, $lado, $contra = false)
+    public function gol($idJogo, $idPartida, $idJogador, $lado, $contra = false, $idAssistencia = 0)
     {
         $partida = $this->partidaDoJogo($idJogo, $idPartida);
+        $this->gravaGol($partida, $idJogador, $lado, $contra, $idAssistencia, null);
+    }
+
+    /**
+     * Gol marcado por um jogador na tela do jogo ao vivo. O jogo já veio do link
+     * (AoVivo confere o token e se o jogador é do grupo).
+     */
+    public function golPeloJogador(array $jogo, $idPartida, $idJogador, $lado, $contra, $idAssistencia, $idRegistrou)
+    {
+        $partida = $this->partidaDoJogoPublico($jogo, $idPartida);
+        $this->gravaGol($partida, $idJogador, $lado, $contra, $idAssistencia, (int) $idRegistrou);
+    }
+
+    /** O jogador desfaz um gol que ele mesmo marcou pela tela do jogo ao vivo (partida em andamento). */
+    public function desfazerGolDoJogador(array $jogo, $idGol, $idRegistrou)
+    {
+        $stmt = $this->_conexao->prepare(
+            "SELECT g.id, g.id_jogador_registrou, p.situacao
+             FROM jogos_gols g JOIN jogos_partidas p ON p.id = g.id_partida
+             WHERE g.id = ? AND p.id_jogo = ? AND g.excluido = 'n'"
+        );
+        $stmt->execute([(int) $idGol, (int) $jogo['id']]);
+        $gol = $stmt->fetch();
+
+        $this->exige($gol, 'Gol não encontrado.');
+        $this->exige((int) $gol['id_jogador_registrou'] === (int) $idRegistrou, 'Só quem marcou o gol (ou o administrador) pode desfazê-lo.');
+        $this->exige($gol['situacao'] === 'em_andamento', 'A partida já foi encerrada. Peça ao administrador para corrigir.');
+
+        $stmt = $this->_conexao->prepare("UPDATE jogos_gols SET excluido = 's' WHERE id = ?");
+        $stmt->execute([(int) $gol['id']]);
+    }
+
+    private function gravaGol(array $partida, $idJogador, $lado, $contra, $idAssistencia, $idRegistrou)
+    {
         $this->exige($partida['situacao'] === 'em_andamento', 'Esta partida já foi encerrada.');
 
-        if ((int) $idJogador > 0) {
+        $ladoDe = function ($id) use ($partida) {
             $stmt = $this->_conexao->prepare('SELECT lado FROM jogos_partidas_jogadores WHERE id_partida = ? AND id_jogador = ?');
-            $stmt->execute([(int) $partida['id'], (int) $idJogador]);
+            $stmt->execute([(int) $partida['id'], (int) $id]);
             $linha = $stmt->fetch();
-            $this->exige($linha, 'Esse jogador não está jogando esta partida.');
 
-            $ladoGol = $contra ? ($linha['lado'] === 'a' ? 'b' : 'a') : $linha['lado'];
+            return $linha ? $linha['lado'] : null;
+        };
+
+        if ((int) $idJogador > 0) {
+            $ladoJogador = $ladoDe($idJogador);
+            $this->exige($ladoJogador, 'Esse jogador não está jogando esta partida.');
+
+            $ladoGol = $contra ? ($ladoJogador === 'a' ? 'b' : 'a') : $ladoJogador;
             $idJogador = (int) $idJogador;
         } else {
             $this->exige(in_array($lado, ['a', 'b'], true), 'Escolha o time que fez o gol.');
@@ -151,12 +192,22 @@ class Partidas extends Conect
             $idJogador = null;
         }
 
+        $idAssistencia = (int) $idAssistencia;
+        if ($idAssistencia > 0) {
+            $this->exige(!$contra, 'Gol contra não tem assistência.');
+            $this->exige($idAssistencia !== $idJogador, 'Quem fez o gol não pode ser também quem deu a assistência.');
+            $this->exige($ladoDe($idAssistencia) === $ladoGol, 'A assistência precisa ser de alguém do mesmo time de quem fez o gol.');
+        } else {
+            $idAssistencia = null;
+        }
+
         $segundos = max(0, time() - strtotime($partida['iniciada_em']));
 
         $stmt = $this->_conexao->prepare(
-            'INSERT INTO jogos_gols (id_partida, id_jogador, lado, contra, segundos) VALUES (?, ?, ?, ?, ?)'
+            'INSERT INTO jogos_gols (id_partida, id_jogador, id_assistencia, lado, contra, segundos, id_jogador_registrou)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
         );
-        $stmt->execute([(int) $partida['id'], $idJogador, $ladoGol, $contra ? 's' : 'n', $segundos]);
+        $stmt->execute([(int) $partida['id'], $idJogador, $idAssistencia, $ladoGol, $contra ? 's' : 'n', $segundos, $idRegistrou]);
     }
 
     /** Apaga um gol marcado por engano (partida ainda em andamento). */
@@ -489,6 +540,7 @@ class Partidas extends Conect
                 'derrotas' => (int) $l['derrotas'],
                 'gols' => 0,
                 'gols_contra' => 0,
+                'assistencias' => 0,
             ];
         }
 
@@ -508,6 +560,21 @@ class Partidas extends Conect
             }
         }
 
+        $stmt = $this->_conexao->prepare(
+            "SELECT g.id_assistencia, COUNT(*) AS passes
+             FROM jogos_gols g
+             JOIN jogos_partidas p ON p.id = g.id_partida AND p.situacao = 'finalizada'
+             JOIN jogos jo ON jo.id = p.id_jogo AND jo.id_grupo = ?{$filtro}
+             WHERE g.excluido = 'n' AND g.id_assistencia IS NOT NULL
+             GROUP BY g.id_assistencia"
+        );
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll() as $g) {
+            if (isset($linhas[(int) $g['id_assistencia']])) {
+                $linhas[(int) $g['id_assistencia']]['assistencias'] = (int) $g['passes'];
+            }
+        }
+
         foreach ($linhas as &$l) {
             $l['aproveitamento'] = (int) round(($l['vitorias'] * 3 + $l['empates']) / ($l['partidas'] * 3) * 100);
         }
@@ -515,7 +582,7 @@ class Partidas extends Conect
 
         $lista = array_values($linhas);
         usort($lista, function ($x, $y) {
-            return [$y['gols'], $y['vitorias'], $y['aproveitamento'], $x['nome']] <=> [$x['gols'], $x['vitorias'], $x['aproveitamento'], $y['nome']];
+            return [$y['gols'], $y['assistencias'], $y['vitorias'], $y['aproveitamento'], $x['nome']] <=> [$x['gols'], $x['assistencias'], $x['vitorias'], $x['aproveitamento'], $y['nome']];
         });
 
         $stmt = $this->_conexao->prepare(
@@ -725,6 +792,18 @@ class Partidas extends Conect
     {
         $jogo = $this->jogoDoUsuario($idJogo);
 
+        $stmt = $this->_conexao->prepare('SELECT * FROM jogos_partidas WHERE id = ? AND id_jogo = ?');
+        $stmt->execute([(int) $idPartida, (int) $jogo['id']]);
+        $partida = $stmt->fetch();
+
+        $this->exige($partida && $partida['situacao'] !== 'descartada', 'Partida não encontrada.');
+
+        return $partida;
+    }
+
+    /** Partida de um jogo já conferido pelo link público (AoVivo). */
+    private function partidaDoJogoPublico(array $jogo, $idPartida)
+    {
         $stmt = $this->_conexao->prepare('SELECT * FROM jogos_partidas WHERE id = ? AND id_jogo = ?');
         $stmt->execute([(int) $idPartida, (int) $jogo['id']]);
         $partida = $stmt->fetch();
@@ -1013,8 +1092,12 @@ class Partidas extends Conect
         }
 
         $stmt = $this->_conexao->prepare(
-            "SELECT g.id, g.id_jogador, j.nome, g.lado, g.contra, g.segundos
-             FROM jogos_gols g LEFT JOIN jogadores j ON j.id = g.id_jogador
+            "SELECT g.id, g.id_jogador, j.nome, g.id_assistencia, ja.nome AS assistencia_nome,
+                    g.id_jogador_registrou, jr.nome AS registrou_nome, g.lado, g.contra, g.segundos
+             FROM jogos_gols g
+             LEFT JOIN jogadores j ON j.id = g.id_jogador
+             LEFT JOIN jogadores ja ON ja.id = g.id_assistencia
+             LEFT JOIN jogadores jr ON jr.id = g.id_jogador_registrou
              WHERE g.id_partida = ? AND g.excluido = 'n' ORDER BY g.criado_em ASC, g.id ASC"
         );
         $stmt->execute([(int) $p['id']]);
@@ -1026,6 +1109,10 @@ class Partidas extends Conect
                 'id' => (int) $g['id'],
                 'id_jogador' => $g['id_jogador'] === null ? null : (int) $g['id_jogador'],
                 'nome' => $g['nome'],
+                'id_assistencia' => $g['id_assistencia'] === null ? null : (int) $g['id_assistencia'],
+                'assistencia_nome' => $g['assistencia_nome'],
+                'id_registrou' => $g['id_jogador_registrou'] === null ? null : (int) $g['id_jogador_registrou'],
+                'registrou_nome' => $g['registrou_nome'],
                 'lado' => $g['lado'],
                 'contra' => $g['contra'] === 's',
                 'segundos' => (int) $g['segundos'],
@@ -1121,7 +1208,7 @@ class Partidas extends Conect
                 'chegada_hora' => $chegada ? substr($chegada, 11, 5) : null,
                 'chegada_ts' => $chegada ? strtotime(substr($chegada, 0, 19)) : null,
                 'partidas' => 0, 'vitorias' => 0, 'empates' => 0, 'derrotas' => 0,
-                'gols' => 0, 'gols_contra' => 0,
+                'gols' => 0, 'gols_contra' => 0, 'assistencias' => 0,
                 'segundos' => 0, 'esperou' => 0,
                 'sequencia' => [],
                 'jogos' => [],
@@ -1159,7 +1246,11 @@ class Partidas extends Conect
 
                     $meusGols = [];
                     $contra = 0;
+                    $passes = 0;
                     foreach ($p['gols'] as $g) {
+                        if ($g['id_assistencia'] === $idJog) {
+                            $passes++;
+                        }
                         if ($g['id_jogador'] !== $idJog) {
                             continue;
                         }
@@ -1177,6 +1268,7 @@ class Partidas extends Conect
                     $x['derrotas'] += $r === 'D' ? 1 : 0;
                     $x['gols'] += count($meusGols);
                     $x['gols_contra'] += $contra;
+                    $x['assistencias'] += $passes;
                     $x['segundos'] += $p['segundos'];
                     $x['sequencia'][] = $r;
                     $x['jogos'][] = [
@@ -1191,6 +1283,7 @@ class Partidas extends Conect
                         'resultado' => $r,
                         'gols' => $meusGols,
                         'gols_contra_proprio' => $contra,
+                        'assistencias' => $passes,
                         'veio_do_saiu' => $jg['emprestado'],
                         'origem' => $jg['origem'],
                         'entrou' => $p[$l]['entrou'],
@@ -1219,7 +1312,7 @@ class Partidas extends Conect
 
         $lista = array_values($jogadores);
         usort($lista, function ($x, $y) {
-            return [$y['gols'], $y['vitorias'], $y['partidas'], $x['nome']] <=> [$x['gols'], $x['vitorias'], $x['partidas'], $y['nome']];
+            return [$y['gols'], $y['assistencias'], $y['vitorias'], $y['partidas'], $x['nome']] <=> [$x['gols'], $x['assistencias'], $x['vitorias'], $x['partidas'], $y['nome']];
         });
 
         $ultimaFim = null;
@@ -1244,28 +1337,47 @@ class Partidas extends Conect
         ];
     }
 
+    /** Artilheiros e garçons da noite: quem fez gol, gol contra ou deu assistência. */
     private function artilheiros($idJogo)
     {
         $stmt = $this->_conexao->prepare(
-            "SELECT g.id_jogador, j.nome, COALESCE(SUM(g.contra = 'n'), 0) AS gols, COALESCE(SUM(g.contra = 's'), 0) AS contra
+            "SELECT g.id_jogador, g.id_assistencia, g.contra
              FROM jogos_gols g
              JOIN jogos_partidas p ON p.id = g.id_partida AND p.id_jogo = ? AND p.situacao <> 'descartada'
-             JOIN jogadores j ON j.id = g.id_jogador
-             WHERE g.excluido = 'n'
-             GROUP BY g.id_jogador, j.nome
-             ORDER BY gols DESC, j.nome ASC"
+             WHERE g.excluido = 'n' AND (g.id_jogador IS NOT NULL OR g.id_assistencia IS NOT NULL)"
         );
         $stmt->execute([(int) $idJogo]);
 
-        $lista = [];
-        foreach ($stmt->fetchAll() as $l) {
-            $lista[] = [
-                'id_jogador' => (int) $l['id_jogador'],
-                'nome' => $l['nome'],
-                'gols' => (int) $l['gols'],
-                'contra' => (int) $l['contra'],
-            ];
+        $porJogador = [];
+        $soma = function ($id, $campo) use (&$porJogador) {
+            $id = (int) $id;
+            if (!isset($porJogador[$id])) {
+                $porJogador[$id] = ['id_jogador' => $id, 'nome' => '', 'gols' => 0, 'contra' => 0, 'assistencias' => 0];
+            }
+            $porJogador[$id][$campo]++;
+        };
+        foreach ($stmt->fetchAll() as $g) {
+            if ($g['id_jogador'] !== null) {
+                $soma($g['id_jogador'], $g['contra'] === 's' ? 'contra' : 'gols');
+            }
+            if ($g['id_assistencia'] !== null) {
+                $soma($g['id_assistencia'], 'assistencias');
+            }
         }
+        if (!$porJogador) {
+            return [];
+        }
+
+        $stmt = $this->_conexao->prepare('SELECT id, nome FROM jogadores WHERE id IN (' . $this->placeholders(array_keys($porJogador)) . ')');
+        $stmt->execute(array_keys($porJogador));
+        foreach ($stmt->fetchAll() as $j) {
+            $porJogador[(int) $j['id']]['nome'] = $j['nome'];
+        }
+
+        $lista = array_values($porJogador);
+        usort($lista, function ($x, $y) {
+            return [$y['gols'], $y['assistencias'], $x['nome']] <=> [$x['gols'], $x['assistencias'], $y['nome']];
+        });
 
         return $lista;
     }

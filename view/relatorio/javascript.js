@@ -101,7 +101,8 @@ $(function () {
                 var L = p[g.lado];
                 var titulo = g.nome ? esc(g.nome) : '<span style="color:var(--label-2)">Autor não informado</span>';
                 h += '<div class="row-item"><div class="min-gol">' + g.minuto + '\'</div>' + dot(L.cor) +
-                    '<div class="row-main"><div class="row-title">' + titulo + '</div><div class="row-sub">' + (g.contra ? 'Gol contra · vale para o ' : 'Colete ') + esc(L.colete_nome) + '</div></div></div>';
+                    '<div class="row-main"><div class="row-title">' + titulo + '</div><div class="row-sub">' + (g.contra ? 'Gol contra · vale para o ' : 'Colete ') + esc(L.colete_nome) +
+                    (g.assistencia_nome ? ' · assistência de ' + esc(g.assistencia_nome) : '') + '</div></div></div>';
             });
             h += '</div>';
         } else {
@@ -131,6 +132,7 @@ $(function () {
         h += '<div class="rel-jog-corpo"><div class="rel-chips">' +
             (j.aproveitamento !== null ? '<span class="chip azul">Aproveitamento ' + j.aproveitamento + '%</span>' : '') +
             (j.esperou ? '<span class="chip">Esperou ' + plural(j.esperou, 'partida', 'partidas') + '</span>' : '') +
+            (j.assistencias ? '<span class="chip verde">' + plural(j.assistencias, 'assistência', 'assistências') + '</span>' : '') +
             (j.gols_contra ? '<span class="chip vermelho">' + plural(j.gols_contra, 'gol contra', 'gols contra') + '</span>' : '') +
             (j.ordem_chegada ? '<span class="chip">Chegou em ' + j.ordem_chegada + 'º' + (j.chegada_hora ? ' · ' + esc(j.chegada_hora) : '') + '</span>' : '') + '</div>';
 
@@ -138,11 +140,12 @@ $(function () {
             h += '<div class="inset-list" style="box-shadow:none">';
             j.jogos.forEach(function (g) {
                 var gols = g.gols.length ? ' · ⚽ ' + g.gols.map(function (m) { return m + '\''; }).join(' ') : '';
+                var passes = g.assistencias ? ' · ' + plural(g.assistencias, 'assistência', 'assistências') : '';
                 var contra = g.gols_contra_proprio ? ' · ' + plural(g.gols_contra_proprio, 'gol contra', 'gols contra') : '';
                 var veio = g.veio_do_saiu ? ' · veio do ' + esc(g.origem || 'time que saiu') : (g.entrou ? ' · veio da lista' : '');
                 h += '<div class="row-item">' + dot(g.cor) +
                     '<div class="row-main"><div class="row-title">Partida ' + g.numero + ' · ' + esc(g.colete_nome) + ' ' + g.gols_pro + ' × ' + g.gols_contra + ' ' + esc(g.contra_colete_nome) + '</div>' +
-                    '<div class="row-sub wrap">' + esc(g.time) + veio + gols + contra + '</div></div>' +
+                    '<div class="row-sub wrap">' + esc(g.time) + veio + gols + passes + contra + '</div></div>' +
                     '<div class="row-end"><i class="selo ' + letra(g.resultado) + '">' + letra(g.resultado) + '</i></div></div>';
             });
             h += '</div>';
@@ -151,7 +154,7 @@ $(function () {
     }
 
     function secJogadores() {
-        var h = '<div class="sec-foot" style="padding-top:12px">Ordenado por gols, vitórias e partidas. Toque no jogador para ver partida por partida.</div><div class="inset-list">';
+        var h = '<div class="sec-foot" style="padding-top:12px">Ordenado por gols, assistências, vitórias e partidas. Toque no jogador para ver partida por partida.</div><div class="inset-list">';
         R.jogadores.forEach(function (j, i) { h += cardJogador(j, i); });
         return h + '</div>';
     }
@@ -181,10 +184,18 @@ $(function () {
             art.forEach(function (j) { t.push(j.nome + ' — ' + j.gols + (j.gols === 1 ? ' gol' : ' gols')); });
         }
 
+        var garcons = R.jogadores.filter(function (j) { return j.assistencias > 0; })
+            .sort(function (a, b) { return b.assistencias - a.assistencias || a.nome.localeCompare(b.nome, 'pt-BR'); });
+        if (garcons.length) {
+            t.push('');
+            t.push('*Assistências*');
+            garcons.forEach(function (j) { t.push(j.nome + ' — ' + j.assistencias + (j.assistencias === 1 ? ' assistência' : ' assistências')); });
+        }
+
         t.push('');
-        t.push('*Por jogador* (partidas · V-E-D · gols)');
+        t.push('*Por jogador* (partidas · V-E-D · gols · assist.)');
         R.jogadores.forEach(function (j) {
-            t.push(j.nome + ' — ' + j.partidas + ' · ' + j.vitorias + '-' + j.empates + '-' + j.derrotas + ' · ' + j.gols + (j.gols_contra ? ' (+' + j.gols_contra + ' contra)' : ''));
+            t.push(j.nome + ' — ' + j.partidas + ' · ' + j.vitorias + '-' + j.empates + '-' + j.derrotas + ' · ' + j.gols + (j.gols_contra ? ' (+' + j.gols_contra + ' contra)' : '') + ' · ' + j.assistencias);
         });
         return t.join('\n');
     }

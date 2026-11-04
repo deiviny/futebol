@@ -490,3 +490,17 @@ a.row-item:active, .row-item.tappable:active { background: var(--fill); }
 .sanfona-resumo { font-size: 15px; font-weight: 400; color: var(--label-2); }
 .sanfona-corpo { padding: 4px 0 4px; }
 .sanfona-corpo > .sec-title:first-child { margin-top: 12px; }
+
+/* Jogo ao vivo (tela do jogador) */
+.aovivo-wrap { padding-top: calc(var(--safe-t) + 18px); }
+.aovivo-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.aovivo-topo h1 { font-size: 26px; font-weight: 700; margin: 0 0 2px; }
+.aovivo-topo p { color: var(--label-2); margin: 0; font-size: 14px; }
+.av-eu { font-size: 14px; white-space: nowrap; padding-top: 6px; }
+.av-voce { font-size: 11px; padding: 1px 7px; margin-left: 4px; vertical-align: middle; }
+.av-eu-linha { font-weight: 700; }
+.av-onde {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 12px 14px;
+    border-radius: var(--r-lg); font-weight: 600; font-size: 15px;
+    background: color-mix(in srgb, var(--team, #007AFF) 15%, var(--bg-elev));
+}

@@ -18,12 +18,27 @@ $(function () {
             if (aoConcluir) { aoConcluir(res); }
         });
     }
+    // Durante o jogo os jogadores marcam gols pelo link ao vivo: a tela busca o jogo de novo
+    // a cada 10 s (só com a aba visível e nenhuma folha aberta) e redesenha se algo mudou.
+    var atualizando = false;
+    function semTempo(jogo) {
+        return JSON.stringify(jogo, function (k, v) { return k === 'segundos' ? undefined : v; });
+    }
+    function atualizaSozinho() {
+        if (atualizando || document.hidden || !J || !J.aberto || !J.sorteado || $('.modal.show').length) { return; }
+        atualizando = true;
+        api('jogo', 'atualizar', { id: JOGO_ID }, { silencioso: true }).done(function (res) {
+            if (res.jogo && !$('.modal.show').length && semTempo(res.jogo) !== semTempo(J)) { J = res.jogo; render(); }
+        }).always(function () { atualizando = false; });
+    }
     function aviso(r) { if (r && r.mensagem) { alertTop('success', r.mensagem); } }
 
     api('jogo', 'carregar', { id: JOGO_ID }).done(function (res) {
         ARENAS = res.arenas;
         J = res.jogo;
         render();
+        setInterval(atualizaSozinho, 10000);
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) { atualizaSozinho(); } });
     }).fail(function () {
         $('#jogoConteudo').html('<div class="empty"><h3>Jogo não encontrado</h3><p>Ele pode ter sido excluído.</p><a class="btn-ios" href="?tela=grupos">Voltar aos grupos</a></div>');
     });
@@ -110,12 +125,13 @@ $(function () {
                 (J.aberto && !J.partida_atual ? sanfona('ajustes', 'Ajustar times', J.jogadores_por_time + ' por time', partAjustes(), false) : '') +
                 (J.historico.length ? sanfona('historico', 'Histórico da noite', J.historico.length + (J.historico.length === 1 ? ' partida' : ' partidas'), partHistorico(), false) : '') +
                 sanfona('chegada', 'Chegada e confirmados', J.chegaram + ' chegaram', partListas(), false) +
+                sanfona('aovivo', 'Link do jogo ao vivo', 'para os jogadores', partLinkAoVivo(), !J.tem_partidas) +
                 sanfona('link', 'Link de confirmação', '', partLink(), false) +
                 partFechar();
         }
         var noDia = J.data <= hojeLocal();
         return noDia
-            ? partSorteio() + partListas() + partLink()
+            ? partSorteio() + partListas() + '<div class="sec-head-lg">Jogo ao vivo</div>' + partLinkAoVivo() + partLink()
             : partLink() + partListas() + partSorteio();
     }
 
@@ -176,8 +192,10 @@ $(function () {
                 var cor = P[g.lado].cor;
                 var titulo = g.nome ? esc(g.nome) : '<span style="color:var(--label-2)">Autor não informado</span>';
                 var sub = g.contra ? 'Gol contra · vale para o colete ' + esc(P[g.lado].colete_nome) : 'Colete ' + esc(P[g.lado].colete_nome);
+                if (g.assistencia_nome) { sub += ' · assistência de ' + esc(g.assistencia_nome); }
+                if (g.registrou_nome) { sub += ' · marcado por ' + esc(g.registrou_nome) + ' pelo link'; }
                 h += '<div class="row-item"><div class="min-gol">' + g.minuto + '\'</div>' + dot(cor) +
-                    '<div class="row-main"><div class="row-title">' + titulo + '</div><div class="row-sub">' + sub + '</div></div>' +
+                    '<div class="row-main"><div class="row-title">' + titulo + '</div><div class="row-sub wrap">' + sub + '</div></div>' +
                     '<div class="row-end"><button type="button" class="btn-plain perigo" data-act="gol-desfazer" data-gol="' + g.id + '" aria-label="Desfazer este gol">' + ICONES.x + '</button></div></div>';
             });
         } else {
@@ -398,7 +416,8 @@ $(function () {
     function golTag(g, p) {
         var cor = p[g.lado].cor;
         var nome = g.nome ? esc(g.nome) : 'Gol sem autor';
-        return '<span class="gol-tag" style="--team:' + esc(cor) + '">⚽ ' + nome + (g.contra ? ' (contra)' : '') + ' ' + g.minuto + '\'</span>';
+        return '<span class="gol-tag" style="--team:' + esc(cor) + '">⚽ ' + nome + (g.contra ? ' (contra)' : '') +
+            (g.assistencia_nome ? ' (assist. ' + esc(g.assistencia_nome) + ')' : '') + ' ' + g.minuto + '\'</span>';
     }
 
     function histLado(L, venceu, saiu, direita) {
@@ -430,15 +449,22 @@ $(function () {
         return '<a class="btn-ios sec bloco mt-2" href="?tela=relatorio&id=' + J.id + '">Relatório completo: todas as partidas e cada jogador</a>';
     }
 
+    function subArtilheiro(a) {
+        var p = [];
+        if (a.assistencias) { p.push(a.assistencias + (a.assistencias === 1 ? ' assistência' : ' assistências')); }
+        if (a.contra) { p.push(a.contra + ' contra'); }
+        return p.length ? '<div class="row-sub">' + p.join(' · ') + '</div>' : '';
+    }
+
     function partHistorico() {
         if (!J.historico.length) { return ''; }
         var h = btnRelatorio();
 
         if (J.artilheiros.length) {
-            h += '<div class="sec-title">Artilheiros</div><div class="inset-list">';
+            h += '<div class="sec-title">Artilheiros e assistências</div><div class="inset-list">';
             J.artilheiros.forEach(function (a, i) {
                 h += '<div class="row-item"><div class="rank-pos' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</div>' +
-                    '<div class="row-main"><div class="row-title">' + esc(a.nome) + '</div>' + (a.contra ? '<div class="row-sub">' + a.contra + ' contra</div>' : '') + '</div>' +
+                    '<div class="row-main"><div class="row-title">' + esc(a.nome) + '</div>' + subArtilheiro(a) + '</div>' +
                     '<div class="rank-gols">' + a.gols + '<small>gol' + (a.gols === 1 ? '' : 's') + '</small></div></div>';
             });
             h += '</div>';
@@ -459,6 +485,20 @@ $(function () {
             '<a class="btn-ios verde" target="_blank" rel="noopener" href="' + esc(whatsappLink(textoConvite())) + '">Enviar no WhatsApp</a></div></div>';
 
         return h;
+    }
+
+    function textoAoVivo() {
+        return '⚽ ' + J.grupo_nome + ' — ' + J.data_fmt +
+            '\n\nAcompanhe o jogo e marque os gols e as assistências (entra só com o seu telefone):\n' + J.link_aovivo;
+    }
+
+    function partLinkAoVivo() {
+        return '<div class="card-ios"><h3>Link do jogo ao vivo</h3><p class="mb-2">Para mandar no grupo no dia do jogo. O jogador entra só com o telefone cadastrado, ' +
+            'vê a partida, o próximo time e a lista de espera, e marca quem fez o gol e quem deu a assistência. ' +
+            'Sortear, encerrar partida, par ou ímpar e fechar o jogo continuam só aqui.</p>' +
+            '<div class="link-box"><span style="flex:1">' + esc(J.link_aovivo) + '</span></div>' +
+            '<div class="btn-row mt-3"><button class="btn-ios sec" data-act="copiar-aovivo">Copiar link</button>' +
+            '<a class="btn-ios verde" target="_blank" rel="noopener" href="' + esc(whatsappLink(textoAoVivo())) + '">Enviar no WhatsApp</a></div></div>';
     }
 
     function cardGoleiros() {
@@ -651,6 +691,9 @@ $(function () {
             case 'goleiros':
                 abreGoleiros();
                 break;
+            case 'copiar-aovivo':
+                copiar(J.link_aovivo, 'Link do jogo ao vivo copiado');
+                break;
             case 'copiar-link':
                 copiar(J.link_publico, 'Link copiado');
                 break;
@@ -687,7 +730,8 @@ $(function () {
     function abreGol(lado) {
         golLado = lado;
         $('#tituloGol').text('Gol do colete ' + J.partida_atual[lado].colete_nome);
-        $('#segGol button').removeClass('ativo').first().addClass('ativo');
+        $('#segGol').removeClass('hidden').find('button').removeClass('ativo').first().addClass('ativo');
+        golDados = null;
         desenhaListaGol('normal');
         abrirFolha('#modalGol');
     }
@@ -718,17 +762,44 @@ $(function () {
         desenhaListaGol(String($(this).data('valor')));
     });
 
+    var golDados = null; // gol escolhido, esperando a assistência
+
     $('#listaGol').on('click', '[data-gol-jog]', function () {
         var $b = $(this);
-        var dados = {
+        golDados = {
             id_partida: J.partida_atual.id,
-            id_jogador: $b.data('gol-jog'),
+            id_jogador: Number($b.data('gol-jog')),
             lado: golLado,
-            contra: $b.data('contra')
+            contra: Number($b.data('contra'))
         };
+        if (golDados.contra) { enviaGol(0); return; }
+        desenhaAssistencia();
+    });
+
+    // Segundo passo do gol: quem deu a assistência (alguém do mesmo colete, menos quem fez).
+    function desenhaAssistencia() {
+        var P = J.partida_atual;
+        var autor = null;
+        P[golLado].jogadores.forEach(function (p) { if (p.id_jogador === golDados.id_jogador) { autor = p.nome; } });
+        $('#segGol').addClass('hidden');
+        var h = '<div class="sec-foot" style="padding-top:0">Gol de <b>' + esc(autor || 'autor não informado') + '</b>. Quem deu a assistência?</div><div class="inset-list">';
+        P[golLado].jogadores.forEach(function (p) {
+            if (p.id_jogador === golDados.id_jogador) { return; }
+            h += '<button type="button" class="row-item tappable" data-assist="' + p.id_jogador + '">' + dot(P[golLado].cor) +
+                '<div class="row-main"><div class="row-title">' + esc(p.nome) + '</div></div></button>';
+        });
+        h += '<button type="button" class="row-item tappable" data-assist="0"><div class="row-main"><div class="row-title" style="color:var(--label-2)">Sem assistência / não sei</div></div></button></div>';
+        $('#listaGol').html(h);
+    }
+
+    $('#listaGol').on('click', '[data-assist]', function () { enviaGol(Number($(this).data('assist'))); });
+
+    function enviaGol(idAssist) {
+        var dados = $.extend({}, golDados, { id_assistencia: idAssist });
+        golDados = null;
         $('#modalGol').modal('hide');
         chama('partida_gol', dados, aviso);
-    });
+    }
 
     // ---------- encerrar partida ----------
     function abreEncerrar() {

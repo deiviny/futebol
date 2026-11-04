@@ -42,6 +42,7 @@ $voltarTexto = 'Grupos';
     </div>
     <div class="segmented mb-3" id="segOrdem" role="tablist" aria-label="Ordenar por">
         <button type="button" class="ativo" data-valor="gols">Gols</button>
+        <button type="button" data-valor="assistencias">Assist.</button>
         <button type="button" data-valor="vitorias">Vitórias</button>
         <button type="button" data-valor="aproveitamento">Aproveitamento</button>
         <button type="button" data-valor="partidas">Partidas</button>

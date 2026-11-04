@@ -10,6 +10,7 @@
 
 require_once dirname(__DIR__) . '/model/Init.php';
 
+use Model\AoVivo;
 use Model\Arenas;
 use Model\Grupos;
 use Model\Inscricoes;
@@ -44,6 +45,14 @@ function confere($descricao, $condicao)
     }
 }
 
+/** "5562999998888" => "(62) 99999-8888", como o jogador digita. */
+function formataTelefoneTeste($n)
+{
+    $n = substr($n, 2);
+
+    return '(' . substr($n, 0, 2) . ') ' . substr($n, 2, 5) . '-' . substr($n, 7);
+}
+
 function erro(callable $fn)
 {
     try {
@@ -57,7 +66,7 @@ function erro(callable $fn)
 
 $pdo = new PDO('mysql:host=' . SERVER . ';port=' . PORTA . ';dbname=' . BANCO . ';charset=utf8mb4', USER, PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
-foreach (['jogos_gols', 'jogos_partidas_jogadores', 'jogos_fila', 'jogos_partidas', 'jogos_pagamentos', 'jogos_times_jogadores', 'jogos_times', 'jogos_presencas', 'jogos', 'grupos_jogadores', 'jogadores', 'grupos_admins', 'grupos', 'arenas', 'usuarios'] as $t) {
+foreach (['jogadores_sessoes', 'jogos_gols', 'jogos_partidas_jogadores', 'jogos_fila', 'jogos_partidas', 'jogos_pagamentos', 'jogos_times_jogadores', 'jogos_times', 'jogos_presencas', 'jogos', 'grupos_jogadores', 'jogadores', 'grupos_admins', 'grupos', 'arenas', 'usuarios'] as $t) {
     $pdo->exec("TRUNCATE TABLE $t");
 }
 $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
@@ -393,6 +402,82 @@ confere('gol contra sem jogador é recusado', erro(function () use ($part, $idJo
 confere('outro admin não marca gol', erro(function () use ($u2, $idJogo, $p1, $a0) { (new Partidas($u2))->gol($idJogo, $p1, $a0, ''); }) !== null);
 confere('artilheiro da noite: jogador a0 com 2 gols', $jogos->detalhe($idJogo)['artilheiros'][0]['id_jogador'] === $a0 && $jogos->detalhe($idJogo)['artilheiros'][0]['gols'] === 2);
 
+echo "Assistência e jogo ao vivo (tela do jogador)\n";
+$placar = function () use ($jogos, $idJogo) {
+    $x = $jogos->detalhe($idJogo)['partida_atual'];
+
+    return $x['a']['gols'] . 'x' . $x['b']['gols'];
+};
+$part->gol($idJogo, $p1, $a0, '', false, $a1);
+$d = $jogos->detalhe($idJogo);
+$golAssist = end($d['partida_atual']['gols']);
+confere('admin marca gol com assistência', $golAssist['id_assistencia'] === $a1 && $golAssist['assistencia_nome'] !== null && $golAssist['id_registrou'] === null);
+confere('artilheiros mostram a assistência', (function ($lista) use ($a1) { foreach ($lista as $l) { if ($l['id_jogador'] === $a1) { return $l['assistencias'] === 1; } } return false; })($d['artilheiros']));
+$part->desfazerGol($idJogo, $golAssist['id']);
+confere('assistência do outro time é recusada', erro(function () use ($part, $idJogo, $p1, $a0, $b0) { $part->gol($idJogo, $p1, $a0, '', false, $b0); }) !== null);
+confere('quem fez não pode ser a assistência', erro(function () use ($part, $idJogo, $p1, $a0) { $part->gol($idJogo, $p1, $a0, '', false, $a0); }) !== null);
+confere('gol contra não tem assistência', erro(function () use ($part, $idJogo, $p1, $b0, $a1) { $part->gol($idJogo, $p1, $b0, '', true, $a1); }) !== null);
+confere('placar volta a 3 x 2', $placar() === '3x2');
+
+$whats = [];
+foreach ($d['confirmados'] as $c) {
+    $whats[$c['id_jogador']] = $c['whatsapp'];
+}
+$av = new AoVivo(null);
+confere('telefone fora do grupo não entra', erro(function () use ($av, $token) { $av->entrar($token, '62900001111'); }) !== null);
+confere('link inválido não entra', erro(function () use ($av, $whats, $a0) { $av->entrar(str_repeat('0', 32), $whats[$a0]); }) !== null);
+$login0 = $av->entrar($token, formataTelefoneTeste($whats[$a0]));
+confere('jogador entra só com o telefone', $login0['jogador']['id'] === $a0 && preg_match('/^[0-9a-f]{64}$/', $login0['token']) === 1);
+$eu = $av->jogadorDoToken($login0['token']);
+confere('o login fica guardado (token do cookie)', $eu && $eu['id'] === $a0);
+confere('token inválido não loga', $av->jogadorDoToken('abc') === null && $av->jogadorDoToken(str_repeat('f', 64)) === null);
+$hash = $pdo->query('SELECT token_hash FROM jogadores_sessoes LIMIT 1')->fetchColumn();
+confere('o banco guarda só o hash do token', $hash === hash('sha256', $login0['token']));
+
+$tela = $av->tela($token, $eu);
+confere('tela mostra a partida ao vivo e a lista', $tela['partida_atual']['id'] === $p1 && $tela['sorteado'] === true && count($tela['fila']) > 0);
+$temNivel = function ($v) use (&$temNivel) {
+    if (!is_array($v)) {
+        return false;
+    }
+    if (array_key_exists('score', $v) || array_key_exists('defesa', $v) || array_key_exists('ataque', $v) || array_key_exists('whatsapp', $v)
+        || (array_key_exists('soma', $v) && array_key_exists('jogadores', $v))) {
+        return true;
+    }
+    foreach ($v as $x) {
+        if ($temNivel($x)) {
+            return true;
+        }
+    }
+
+    return false;
+};
+confere('tela do jogador não mostra o nível de ninguém', !$temNivel($tela) && !$temNivel($av->tela($token, $eu)['fila']));
+confere('sem admin logado não mostra o atalho', $tela['admin_url'] === null);
+confere('admin logado no mesmo navegador ganha o atalho', (new AoVivo($u1))->tela($token, $eu)['admin_url'] === '?tela=jogo&id=' . $idJogo);
+confere('admin de outro grupo não ganha o atalho', (new AoVivo($u2))->tela($token, $eu)['admin_url'] === null);
+
+$av->gol($token, $eu, ['id_partida' => $p1, 'id_jogador' => $a1, 'id_assistencia' => $a0]);
+$d = $jogos->detalhe($idJogo);
+$golJog = end($d['partida_atual']['gols']);
+confere('jogador marca gol com assistência pelo link', $placar() === '4x2' && $golJog['id_jogador'] === $a1 && $golJog['id_assistencia'] === $a0 && $golJog['id_registrou'] === $a0);
+confere('a tela do admin mostra quem marcou pelo link', $golJog['registrou_nome'] !== null);
+confere('jogador não marca gol de quem não está jogando', erro(function () use ($av, $token, $eu, $p1) { $av->gol($token, $eu, ['id_partida' => $p1, 'id_jogador' => 999999]); }) !== null);
+confere('jogador não marca gol em partida de outro jogo', erro(function () use ($av, $token, $eu, $a0) { $av->gol($token, $eu, ['id_partida' => 999999, 'id_jogador' => $a0]); }) !== null);
+$login1 = $av->entrar($token, $whats[$b0]);
+$outro = $av->jogadorDoToken($login1['token']);
+confere('outro jogador não desfaz o gol que não marcou', erro(function () use ($av, $token, $outro, $golJog) { $av->desfazerGol($token, $outro, $golJog['id']); }) !== null);
+$av->desfazerGol($token, $eu, $golJog['id']);
+confere('quem marcou desfaz o próprio gol', $placar() === '3x2');
+$av->sair($login1['token']);
+confere('sair apaga o login daquele celular', $av->jogadorDoToken($login1['token']) === null && $av->jogadorDoToken($login0['token']) !== null);
+$pdo->prepare("UPDATE grupos_jogadores SET ativo = 'n' WHERE id_grupo = ? AND id_jogador = ?")->execute([$idGrupo, $b0]);
+$codigo = 0;
+try { $av->tela($token, $outro); } catch (\DomainException $e) { $codigo = $e->getCode(); }
+confere('jogador desativado no grupo volta para o login', $codigo === 401);
+confere('jogador desativado não entra', erro(function () use ($av, $token, $whats, $b0) { $av->entrar($token, $whats[$b0]); }) !== null);
+$pdo->prepare("UPDATE grupos_jogadores SET ativo = 's' WHERE id_grupo = ? AND id_jogador = ?")->execute([$idGrupo, $b0]);
+
 // a lista pode ser reorganizada durante a partida
 $timesSvc->moverNaFila($idJogo, $idConvidado, 'inicio');
 $d = $jogos->detalhe($idJogo);
@@ -418,6 +503,8 @@ confere('encerrar duas vezes é recusado', erro(function () use ($part, $idJogo,
 confere('não marca gol em partida encerrada', erro(function () use ($part, $idJogo, $p1, $a0) { $part->gol($idJogo, $p1, $a0, ''); }) !== null);
 
 $pr = $d['proxima'];
+$telaIntervalo = (new AoVivo(null))->tela($token, $eu);
+confere('no intervalo o jogador vê o próximo time, sem o nível', $telaIntervalo['partida_atual'] === null && !empty($telaIntervalo['proxima']['entra']['jogadores']) && !$temNivel($telaIntervalo));
 confere('próxima: entram os 5 primeiros da lista com o colete de quem saiu (2)',
     $pr['primeira'] === false && $pr['colete_entra'] === 2 && $pr['entra']['colete_nome'] === 'Preto'
     && array_column($pr['entra']['jogadores'], 'id_jogador') === array_merge([$idsJog['Lucas'], $idConvidado], array_slice($time2Ids, 0, 3)));
