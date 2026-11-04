@@ -192,6 +192,7 @@ class Jogos extends Conect
                 'valor' => (float) $jogo['arena_valor'],
             ] : null,
             'link_publico' => baseUrl() . '/?tela=confirmar&t=' . $jogo['token'],
+            'link_aovivo' => baseUrl() . '/?tela=aovivo&t=' . $jogo['token'],
             'confirmados' => $confirmados,
             'recusados' => $recusados,
             'pendentes' => $pendentes,

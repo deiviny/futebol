@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 // Só controllers conhecidos: nada de caminho vindo do navegador chegando no require.
 $controller = isset($_POST['controller']) ? (string) $_POST['controller'] : '';
-if (!preg_match('#^view/(login|inicio|arenas|perfil|grupos|grupo|jogo|relatorio|confirmar|inscricao)/controller\.php$#', $controller)
+if (!preg_match('#^view/(login|inicio|arenas|perfil|grupos|grupo|jogo|relatorio|confirmar|inscricao|aovivo)/controller\.php$#', $controller)
     || !is_file(__DIR__ . '/' . $controller)) {
     responder(404, ['error' => 'Controller não encontrado.']);
 }
@@ -40,8 +40,9 @@ if (empty($_SESSION['csrf']) || !hash_equals($_SESSION['csrf'], $enviado)) {
     responder(403, ['error' => 'Sessão inválida. Recarregue a página.', 'recarregar' => true]);
 }
 
-// Telas sem login: entrar/criar conta, a confirmação pública de presença e a inscrição no grupo.
-$publicos = ['view/login/controller.php', 'view/confirmar/controller.php', 'view/inscricao/controller.php'];
+// Telas sem login de administrador: entrar/criar conta, a confirmação pública de presença,
+// a inscrição no grupo e o jogo ao vivo (o jogador entra com o telefone, ver Model\AoVivo).
+$publicos = ['view/login/controller.php', 'view/confirmar/controller.php', 'view/inscricao/controller.php', 'view/aovivo/controller.php'];
 if (!in_array($controller, $publicos, true) && empty($_SESSION['sess_usuario']['id'])) {
     responder(401, ['error' => 'Sessão expirada. Entre novamente.', 'login' => true]);
 }

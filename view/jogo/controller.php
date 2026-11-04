@@ -29,6 +29,10 @@ try {
             $output['arenas'] = (new Arenas($sess))->listing();
             break;
 
+        case 'atualizar':
+            // A tela se atualiza sozinha durante o jogo (gols marcados pelos jogadores no link ao vivo).
+            break;
+
         case 'editar':
             $jogos->atualizar($_POST);
             $output['mensagem'] = 'Jogo atualizado';
@@ -124,7 +128,8 @@ try {
                 $idPartida,
                 $idJogador,
                 isset($_POST['lado']) ? $_POST['lado'] : '',
-                !empty($_POST['contra']) && $_POST['contra'] !== '0'
+                !empty($_POST['contra']) && $_POST['contra'] !== '0',
+                isset($_POST['id_assistencia']) ? (int) $_POST['id_assistencia'] : 0
             );
             $output['mensagem'] = 'Gol!';
             break;

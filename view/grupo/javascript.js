@@ -322,13 +322,15 @@ $(function () {
             return a.nome.localeCompare(b.nome, 'pt-BR');
         });
 
-        var rotulo = { gols: 'gols', vitorias: 'vitórias', aproveitamento: 'aprov.', partidas: 'partidas' };
+        var rotulo = { gols: 'gols', assistencias: 'assist.', vitorias: 'vitórias', aproveitamento: 'aprov.', partidas: 'partidas' };
         h += '<div class="inset-list">';
         lista.forEach(function (j, i) {
             var valor = rkOrdem === 'aproveitamento' ? j.aproveitamento + '%' : j[rkOrdem];
             h += '<div class="row-item"><div class="rank-pos' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</div>' +
                 '<div class="row-main"><div class="row-title">' + esc(j.nome) + '</div>' +
                 '<div class="row-sub wrap">' + j.partidas + ' partida' + (j.partidas === 1 ? '' : 's') + ' · ' + j.vitorias + 'V ' + j.empates + 'E ' + j.derrotas + 'D · ' + j.aproveitamento + '%' +
+                (rkOrdem !== 'gols' && j.gols ? ' · ' + j.gols + ' gol' + (j.gols === 1 ? '' : 's') : '') +
+                (rkOrdem !== 'assistencias' && j.assistencias ? ' · ' + j.assistencias + ' assist.' : '') +
                 (j.gols_contra ? ' · ' + j.gols_contra + ' contra' : '') + '</div></div>' +
                 '<div class="rank-gols">' + valor + '<small>' + rotulo[rkOrdem] + '</small></div></div>';
         });
