@@ -24,7 +24,7 @@ class Jogadores extends Conect
 
         $stmt = $this->_conexao->prepare(
             'SELECT j.id, j.nome, j.whatsapp, j.instagram, j.data_nascimento,
-                    gj.score, gj.ativo, gj.pendente, gj.id_convidado_por, c.nome AS convidado_por
+                    gj.score, gj.defesa, gj.ataque, gj.ativo, gj.pendente, gj.id_convidado_por, c.nome AS convidado_por
              FROM grupos_jogadores gj
              JOIN jogadores j ON j.id = gj.id_jogador
              LEFT JOIN jogadores c ON c.id = gj.id_convidado_por
@@ -37,6 +37,8 @@ class Jogadores extends Conect
         foreach ($lista as &$j) {
             $j['id'] = (int) $j['id'];
             $j['score'] = (float) $j['score'];
+            $j['defesa'] = (float) $j['defesa'];
+            $j['ataque'] = (float) $j['ataque'];
             $j['id_convidado_por'] = $j['id_convidado_por'] ? (int) $j['id_convidado_por'] : null;
         }
 
@@ -54,15 +56,21 @@ class Jogadores extends Conect
         $whatsapp = self::normalizaWhatsapp(isset($dados['whatsapp']) ? $dados['whatsapp'] : '');
         $instagram = ltrim(trim(isset($dados['instagram']) ? $dados['instagram'] : ''), '@');
         $nascimento = trim(isset($dados['data_nascimento']) ? $dados['data_nascimento'] : '');
-        $score = $this->decimal(isset($dados['score']) ? $dados['score'] : '5');
+        // Nível de defesa e de ataque (0 a 10). Sem eles (chamadas antigas), os dois valem o score.
+        $score = isset($dados['score']) ? $dados['score'] : '5';
+        $defesa = $this->decimal(isset($dados['defesa']) && $dados['defesa'] !== '' ? $dados['defesa'] : $score);
+        $ataque = $this->decimal(isset($dados['ataque']) && $dados['ataque'] !== '' ? $dados['ataque'] : $score);
         $ativo = (isset($dados['ativo']) && $dados['ativo'] === 'n') ? 'n' : 's';
         $idConvidou = isset($dados['id_convidado_por']) ? (int) $dados['id_convidado_por'] : 0;
 
         $this->exige($nome !== '' && mb_strlen($nome) <= 120, 'Informe o nome do jogador.');
         $this->exige($whatsapp !== null, 'WhatsApp inválido. Use DDD + número (ex.: 62 99999-8888).');
         $this->exige(mb_strlen($instagram) <= 60 && preg_match('/^[A-Za-z0-9._]*$/', $instagram), 'Instagram inválido.');
-        $this->exige($score !== null && $score >= 0 && $score <= 10, 'O score vai de 0 a 10.');
-        $score = round($score * 2) / 2; // passos de 0,5
+        $this->exige($defesa !== null && $defesa >= 0 && $defesa <= 10, 'O nível de defesa vai de 0 a 10.');
+        $this->exige($ataque !== null && $ataque >= 0 && $ataque <= 10, 'O nível de ataque vai de 0 a 10.');
+        $defesa = round($defesa * 2) / 2; // passos de 0,5
+        $ataque = round($ataque * 2) / 2;
+        $score = round(($defesa + $ataque) / 2, 1); // média, usada no histórico dos times
 
         if ($nascimento !== '') {
             $d = \DateTime::createFromFormat('Y-m-d', $nascimento);
@@ -100,12 +108,13 @@ class Jogadores extends Conect
 
             // Admin salvou o jogador: se ele estava pendente (veio pelo link), fica aprovado.
             $stmt = $this->_conexao->prepare(
-                "INSERT INTO grupos_jogadores (id_grupo, id_jogador, score, id_convidado_por, ativo)
-                 VALUES (?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE score = VALUES(score), id_convidado_por = VALUES(id_convidado_por), ativo = VALUES(ativo),
+                "INSERT INTO grupos_jogadores (id_grupo, id_jogador, score, defesa, ataque, id_convidado_por, ativo)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE score = VALUES(score), defesa = VALUES(defesa), ataque = VALUES(ataque),
+                                         id_convidado_por = VALUES(id_convidado_por), ativo = VALUES(ativo),
                                          pendente = 'n'"
             );
-            $stmt->execute([$idGrupo, $idJogador, $score, $idConvidou > 0 ? $idConvidou : null, $ativo]);
+            $stmt->execute([$idGrupo, $idJogador, $score, $defesa, $ataque, $idConvidou > 0 ? $idConvidou : null, $ativo]);
 
             $this->_conexao->commit();
         } catch (\Exception $e) {

@@ -364,10 +364,10 @@ $(function () {
                     '<div class="row-end"><button type="button" class="btn-plain perigo" data-recusar="' + j.id + '" data-nome="' + esc(j.nome) + '" style="font-size:15px">Recusar</button>' +
                     '<button type="button" class="btn-ios verde peq" data-aprovar="' + j.id + '">Aprovar</button></div></div>';
             });
-            h += '</div><div class="sec-foot">Entraram pelo link de inscrição. Aprovados entram com score 5 (ajuste depois).</div>';
+            h += '</div><div class="sec-foot">Entraram pelo link de inscrição. Aprovados entram com defesa 5 e ataque 5 (ajuste depois).</div>';
         }
         if (!membros.length) {
-            $('#jogadoresLista').html(h + '<div class="empty"><h3>Nenhum jogador</h3><p>Adicione os jogadores com WhatsApp e o nível de cada um (score), ou mande o link de inscrição (em Ajustes) no grupo do WhatsApp.</p></div>');
+            $('#jogadoresLista').html(h + '<div class="empty"><h3>Nenhum jogador</h3><p>Adicione os jogadores com WhatsApp e o nível de defesa e de ataque de cada um, ou mande o link de inscrição (em Ajustes) no grupo do WhatsApp.</p></div>');
             return;
         }
         h += '<div class="sec-title">' + ativos + ' ativo' + (ativos === 1 ? '' : 's') + ' · ' + membros.length + ' no total</div><div class="inset-list">';
@@ -377,7 +377,7 @@ $(function () {
             if (j.convidado_por) { partes.push('convidado por ' + j.convidado_por); }
             h += '<div class="row-item tappable" data-jogador="' + j.id + '" style="' + (j.ativo === 'n' ? 'opacity:.55' : '') + '">' +
                 '<div class="row-main"><div class="row-title">' + esc(j.nome) + '</div><div class="row-sub wrap">' + esc(partes.join(' · ')) + '</div></div>' +
-                '<div class="row-end">' + (j.ativo === 'n' ? '<span class="chip">Inativo</span>' : '') + '<span class="score">' + j.score.toFixed(1).replace('.', ',') + '</span>' + ICONES.seta + '</div></div>';
+                '<div class="row-end">' + (j.ativo === 'n' ? '<span class="chip">Inativo</span>' : '') + '<span class="score" title="Defesa">D ' + j.defesa.toFixed(1).replace('.', ',') + '</span> <span class="score" title="Ataque">A ' + j.ataque.toFixed(1).replace('.', ',') + '</span>' + ICONES.seta + '</div></div>';
         });
         $('#jogadoresLista').html(h + '</div>');
     }
@@ -395,8 +395,11 @@ $(function () {
         $('#pConvidou').html(h);
     }
 
-    function mostraScore() { $('#pScoreValor').text(Number($('#pScore').val()).toFixed(1).replace('.', ',')); }
-    $('#pScore').on('input', mostraScore);
+    function mostraScore() {
+        $('#pDefesaValor').text(Number($('#pDefesa').val()).toFixed(1).replace('.', ','));
+        $('#pAtaqueValor').text(Number($('#pAtaque').val()).toFixed(1).replace('.', ','));
+    }
+    $('#pDefesa, #pAtaque').on('input', mostraScore);
 
     function abrirJogador(j) {
         $('#tituloJogador').text(j ? 'Editar jogador' : 'Novo jogador');
@@ -405,7 +408,8 @@ $(function () {
         $('#pWhats').val(j ? formataTelefone(j.whatsapp) : '');
         $('#pInsta').val(j && j.instagram ? '@' + j.instagram : '');
         $('#pNasc').val(j && j.data_nascimento ? j.data_nascimento : '');
-        $('#pScore').val(j ? j.score : 5);
+        $('#pDefesa').val(j ? j.defesa : 5);
+        $('#pAtaque').val(j ? j.ataque : 5);
         $('#pAtivo').prop('checked', j ? j.ativo === 's' : true);
         $('#blocoAtivo').toggleClass('hidden', !j);
         $('#btnRemoverJogador').toggleClass('hidden', !j);

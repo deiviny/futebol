@@ -86,6 +86,19 @@ for ($i = 0; $i < 30; $i++) {
 }
 confere('resultados variam entre sorteios', count($variados) > 3);
 
+// Defesa e ataque: 4 zagueiros (defesa alta, ataque baixo) e 4 atacantes (o contrário).
+// Pela média todos valem 5; o sorteio precisa dividir 2 zagueiros e 2 atacantes para cada lado.
+$niveis = [1 => [9, 1], 2 => [9, 1], 3 => [9, 1], 4 => [9, 1], 5 => [1, 9], 6 => [1, 9], 7 => [1, 9], 8 => [1, 9]];
+$certos = 0;
+for ($i = 0; $i < 20; $i++) {
+    $tn = (new Sorteio())->balancear($niveis, 2);
+    $zagueirosNoTime1 = count(array_intersect($tn[0], [1, 2, 3, 4]));
+    $certos += ($zagueirosNoTime1 === 2 && Sorteio::diferenca($tn, $niveis) < 0.001) ? 1 : 0;
+}
+confere('defesa e ataque equilibrados (2 zagueiros e 2 atacantes por time)', $certos === 20);
+$tn = (new Sorteio())->balancear([1 => [8, 6], 2 => [7, 3], 3 => [5, 9], 4 => [4, 4], 5 => [6, 6], 6 => [3, 7]], 2, 5);
+confere('defesa e ataque: 6 jogadores em 2 times de 3', count($tn[0]) === 3 && count($tn[1]) === 3);
+
 // ------------------------------------------------------------------ login
 echo "Login\n";
 $login = new Login();
@@ -171,6 +184,14 @@ $lista = $j1->listing($idGrupo);
 confere('11 jogadores no grupo', count($lista) === 11);
 confere('whatsapp normalizado com 55', strncmp($lista[0]['whatsapp'], '55', 2) === 0);
 confere('score em passos de 0,5', fmod($lista[0]['score'] * 2, 1) == 0);
+confere('sem defesa/ataque, os dois valem o score', $lista[0]['defesa'] === $lista[0]['score'] && $lista[0]['ataque'] === $lista[0]['score']);
+$idNiveis = $j1->salvar(['id_grupo' => $idGrupo, 'nome' => 'Zagueiro', 'whatsapp' => '62977776666', 'defesa' => '8,5', 'ataque' => '3']);
+$linhaNiveis = $pdo->query("SELECT score, defesa, ataque FROM grupos_jogadores WHERE id_grupo = $idGrupo AND id_jogador = $idNiveis")->fetch();
+confere('defesa e ataque gravados', (float) $linhaNiveis['defesa'] === 8.5 && (float) $linhaNiveis['ataque'] === 3.0);
+confere('score vira a média de defesa e ataque', abs((float) $linhaNiveis['score'] - 5.8) < 0.051);
+confere('ataque acima de 10 bloqueado', erro(function () use ($j1, $idGrupo, $idNiveis) { $j1->salvar(['id_grupo' => $idGrupo, 'id' => $idNiveis, 'nome' => 'Zagueiro', 'whatsapp' => '62977776666', 'defesa' => 5, 'ataque' => 11]); }) !== null);
+$pdo->exec("DELETE FROM grupos_jogadores WHERE id_jogador = $idNiveis");
+$pdo->exec("DELETE FROM jogadores WHERE id = $idNiveis");
 confere('whatsapp duplicado no grupo bloqueado', erro(function () use ($j1, $idGrupo, $lista) { $j1->salvar(['id_grupo' => $idGrupo, 'nome' => 'Dup', 'whatsapp' => $lista[0]['whatsapp']]); }) !== null);
 confere('outro admin não lista jogadores do grupo', erro(function () use ($j2, $idGrupo) { $j2->listing($idGrupo); }) !== null);
 
